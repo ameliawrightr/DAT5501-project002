@@ -1,4 +1,4 @@
-#1. shared IO + validation functions
+#shared IO + validation functions
 
 from pathlib import Path
 import pandas as pd
