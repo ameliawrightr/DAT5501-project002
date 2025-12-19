@@ -1,0 +1,7 @@
+ons_retail:
+  file: /Users/amelia/DAT5501-project002/data/raw/ONS_UK_retail_sales_index_complete_dataset.xlsx
+  sheet: "Table 1 M"
+  mapping:
+    "Non-Specialised Predominantly Non-Food Stores": "school_supplies"
+    "Sports Equipment, Games & Toys": "fitness_equipment"
+    "Computers & Telecomms Equipment": "electronics_accessories"

@@ -1,7 +1,6 @@
 #DEMAND INGESTION - ONS Retail Sales Data
 from __future__ import annotations
 
-from os import path
 from pathlib import Path
 from typing import Any
 
@@ -11,7 +10,9 @@ from .io import read_csv_or_excel, write_parquet
 from .validation import (
     require_columns,
     require_unique_keys,
+    require_no_missing_weeks,
     require_non_null,
+    require_numeric_range,
 )
 
 #--------------------------------------------------------------------------------------------
@@ -75,7 +76,12 @@ def _week_start_monday(dt: pd.Series) -> pd.Series:
 #--------------------------------------------------------------------------------------------
 
 #1. load raw ONS file
-def load_ons_retail_raw(pat: Path, *, sheet: str | None = None, **kwargs: Any) -> pd.DataFrame:
+def load_ons_retail_raw(
+        path: Path, 
+        *, 
+        sheet_name: str | None = None, 
+        **kwargs: Any
+    ) -> pd.DataFrame:
     """
     Read raw ONS retail data file into dataframe.
      - Does not reshape to tidy format
@@ -84,7 +90,7 @@ def load_ons_retail_raw(pat: Path, *, sheet: str | None = None, **kwargs: Any) -
     Parameters:
      - path: Path
         CSV/Excel file path
-     - sheet : str | None
+     - sheet_name : str | None
         optional sheet name for Excel files
      - kwargs : Any
         additional arguments passed to the read function
@@ -95,7 +101,7 @@ def load_ons_retail_raw(pat: Path, *, sheet: str | None = None, **kwargs: Any) -
     if not path.exists():
         raise FileNotFoundError(f"ONS retail data file not found: {path}")
 
-    df = read_csv_or_excel(path, sheet_name=sheet, **kwargs)
+    df = read_csv_or_excel(path, sheet_name=sheet_name, **kwargs)
     df = _normalise_cols(df)
 
     if df.empty:
@@ -104,7 +110,10 @@ def load_ons_retail_raw(pat: Path, *, sheet: str | None = None, **kwargs: Any) -
     return df
                                    
 #2. map ONS series to 3 categories
-def map_ons_to_categories(df_raw: pd.DataFrame, mapping: dict[str, str]) -> pd.DataFrame:
+def map_ons_to_categories(
+        df_raw: pd.DataFrame, 
+        mapping: dict[str, str]
+    ) -> pd.DataFrame:
     """
     1. Map ONS series to project categories
     2. Return tidy table
@@ -132,9 +141,11 @@ def map_ons_to_categories(df_raw: pd.DataFrame, mapping: dict[str, str]) -> pd.D
 
     date_col = _find_first_col(df, _DATE_COL_CANDIDATES)
     if date_col is None:
-        raise ValueError("Could not find a date column in raw data."
-                         f"Tried: {list(_DATE_COL_CANDIDATES)}")
-    
+        raise ValueError(
+            "Could not find a date column in raw data."
+            f"Tried: {list(_DATE_COL_CANDIDATES)}"
+        )
+
     #LONG FORMAT PATH
     if _is_long_format(df):
         #identify series ID column
@@ -151,11 +162,14 @@ def map_ons_to_categories(df_raw: pd.DataFrame, mapping: dict[str, str]) -> pd.D
             raise ValueError("Could not find value column in long format data.")
         
         out = df[[date_col, series_col, value_col]].copy()
-        out.rename(columns={
-            date_col: "date",
-            series_col: "series_key",
-            value_col: "value"
-        }, inplace=True)
+        out.rename(
+            columns={
+                date_col: "date",
+                series_col: "series_key",
+                value_col: "value"
+            },
+            inplace=True
+        )
 
         out["date"] = _parse_date_series(out["date"])
         out["value"] = _coerce_numeric(out["value"])
@@ -286,7 +300,13 @@ def to_weekly_demand(
                     " Must be 'ffill' or 'interpolate'."
                 )
             
-            tmp = g2.reset_index().rename(columns={"index": "week_start", value_col: "demand"})
+            tmp = (
+                g2.reset_index()
+                .rename(columns={
+                    "index": "week_start",
+                    value_col: "demand"
+                })
+            )
             tmp["category"] = category
             weekly_frames.append(tmp)
 
@@ -296,7 +316,11 @@ def to_weekly_demand(
         require_non_null(out, ["week_start", "category"], "demand_weekly_monthly_upsampled")
         require_unique_keys(out, ["week_start", "category"], "demand_weekly_monthly_upsampled")
 
-        return out[["week_start", "category", "demand"]].sort_values(["category", "week_start"]).reset_index(drop=True)
+        return (
+            out[["week_start", "category", "demand"]]
+            .sort_values(["category", "week_start"])
+            .reset_index(drop=True)
+        )
     
     #otherwise: aggregate to weekly
     if agg not in {"mean", "sum"}:
@@ -312,7 +336,11 @@ def to_weekly_demand(
     require_unique_keys(grouped, ["week_start", "category"], "demand_weekly_aggregated")
     require_non_null(grouped, ["week_start", "category"], "demand_weekly_aggregated")
 
-    return grouped[["week_start", "category", "demand"]].sort_values(["category", "week_start"]).reset_index(drop=True)
+    return (
+        grouped[["week_start", "category", "demand"]]
+        .sort_values(["category", "week_start"])
+        .reset_index(drop=True)
+    )
 
 #4. validate time series assumptions and save processed file
 def build_demand_weekly(
@@ -320,7 +348,7 @@ def build_demand_weekly(
     mapping: dict[str, str],
     out_path: Path,
     *,
-    sheet: str | None = None,
+    sheet_name: str | None = None,
     agg: str = "mean",
     monthly_to_weekly_method: str = "ffill",
     reader_kwargs: dict[str, Any] | None = None,
@@ -336,7 +364,7 @@ def build_demand_weekly(
         Mapping from ONS series id to project category
      - out_path : Path
         Path to save processed parquet file
-     - sheet : str | None
+     - sheet_name : str | None
         optional sheet name for Excel files
      - agg : str
         weekly agg: "mean" or "sum"
@@ -354,7 +382,7 @@ def build_demand_weekly(
     """
     reader_kwargs = reader_kwargs or {}
 
-    df_raw = load_ons_retail_raw(ons_path, sheet=sheet, **reader_kwargs)
+    df_raw = load_ons_retail_raw(ons_path, sheet_name=sheet_name, **reader_kwargs)
     df_tidy = map_ons_to_categories(df_raw, mapping=mapping)
     df_weekly = to_weekly_demand(
         df_tidy,
@@ -369,5 +397,5 @@ def build_demand_weekly(
     require_unique_keys(df_weekly, ["week_start", "category"], "demand_weekly_final")
     require_non_null(df_weekly, ["week_start", "category", "demand"], "demand_weekly_final")
 
-    write_parquet(df_weekly, out_path)
+    write_parquet(df_weekly, out_path, dataset_name="demand_weekly")
     return df_weekly
