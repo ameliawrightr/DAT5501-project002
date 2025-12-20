@@ -30,11 +30,12 @@ def load_weekly_event_calendar(
 def load_monthly_events(
         path: Path = MONTHLY_EVENTS_PATH
 ) -> pd.DataFrame:
+    
     #load monthly calendar/events features and parse dates
     events = pd.read_csv(path)
 
     #use DD/MM/YYYY date format
-    events["event_date"] = pd.to_datetime(events["event_date"], dayfirst=True)
+    events["date"] = pd.to_datetime(events["date"], dayfirst=True)
 
     return events
 
@@ -95,7 +96,7 @@ def add_weekly_event_features(
 def add_monthly_event_features(
         demand_monthly: pd.DataFrame,
         events: Optional[pd.DataFrame] = None,
-        date_col: str = "event_date"
+        date_col: str = "date"
 ) -> pd.DataFrame:
     """ 
     Merge monthly calendar/event indicators onto monthly demand df
@@ -106,7 +107,7 @@ def add_monthly_event_features(
     - events: Optional[pd.DataFrame]
         DataFrame with monthly event features, if None loads default
     - date_col: str
-        Name of date column in demand_monthly to merge on (default "event_date")
+        Name of date column in demand_monthly to merge on (default "date")
     
     Returns:
     - pd.DataFrame
@@ -123,8 +124,8 @@ def add_monthly_event_features(
     
     df[date_col] = pd.to_datetime(df[date_col], errors='coerce')
 
-    events_for_merge = events.rename(columns={"event_date": date_col})
-    
+    events_for_merge = events.rename(columns={"date": date_col})
+
     merged = df.merge(
         events_for_merge,
         on=date_col,

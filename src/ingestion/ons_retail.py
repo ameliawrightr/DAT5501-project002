@@ -159,7 +159,7 @@ def build_demand_monthly(
     return df_out
 
 
-#2. 
+#2. validate time series assumptions and save processed file
 def build_demand_weekly(
     in_path: Path,
     out_path: Path,
