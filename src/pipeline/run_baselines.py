@@ -17,7 +17,7 @@ from src.evaluation.metrics import compute_errors
 #1. 
 def run_baselines_for_category(
         category: str,
-        demand_csv_path: str = "data/processed/calendar_events_uk_weekly_1988_2025.csv",
+        demand_csv_path: str = "data/processed/demand_monthly.csv",
         seasonal_period: int = 52,
         rolling_window: int = 12,
         test_weeks: int | None = 52,
@@ -43,8 +43,9 @@ def run_baselines_for_category(
         raise ValueError(f"No data found for category: {category}")
     
     df_cat = df_cat.set_index("week_start")
-    #enforce weekly frequency
-    y = df_cat["demand"].asfreq("W-MON")
+
+    #enforce weekly frequency,then fill missing weeks with 0 demand
+    y = df_cat["demand"].asfreq("W-MON").fillna(0)
 
     if test_weeks is None:
         test_weeks = max(4, len(y) // 4)
@@ -77,9 +78,14 @@ def run_baselines_for_category(
     pprint(ra_errors)
 
     #Baseline 3: Time Regression
-    tr_raw = time_regression(y_train, horizon=horizon)
-    tr_forecast = align_predictions(tr_raw, index=y_test.index)
-    tr_errors = compute_errors(y_test, tr_forecast)
+    y_train_clean = y_train.dropna()
+    tr_forecast, _ = time_regression(
+        history=y_train_clean, 
+        horizon=horizon, 
+        freq="W"
+    )
+    tr_forecast_aligned = tr_forecast.reindex(y_test.index)
+    tr_errors = compute_errors(y_test, tr_forecast_aligned)
     print("\n Time Regression Errors:")
     pprint(tr_errors)
 

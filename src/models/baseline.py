@@ -55,7 +55,7 @@ def seasonal_naive(
 
     #repeat last season as many times as needed to cover horizon
     repeats = int(np.ceil(horizon / seasonal_period))
-    tiled = np.tile(last_season, repeats=repeats)
+    tiled = np.tile(last_season, repeats)
     forecast_values = tiled[:horizon]
 
     return pd.Series(forecast_values)
@@ -90,7 +90,7 @@ def rolling_average(
         )
 
     mean_value = history.iloc[-window:].mean()
-    forecast_values = np.full(shape=horizon, fill_value=mean_value, dtype=np.float)
+    forecast_values = np.full(shape=horizon, fill_value=mean_value, dtype=np.float64)
 
     return pd.Series(forecast_values)
 
