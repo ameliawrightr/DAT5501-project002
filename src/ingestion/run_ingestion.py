@@ -1,56 +1,33 @@
 #ONE COMMAND TO RUN INGESTION END TO END
 
+from __future__ import annotations
 from pathlib import Path
-import yaml
 
-from .ons_retail import build_demand_weekly
-from .calendar_events import build_events_weekly
+from .ons_retail import build_demand_monthly
+from .calendar_events import build_events_monthly
 
+from .validation import (
+    require_columns,
+    require_non_null,
+    require_unique_keys,
+)
 
-def load_config(config_path: Path | None = None) -> dict:
-    #project root = parent of src/
+def main() -> None:
     project_root = Path(__file__).resolve().parents[2]
-    config_path = (project_root / 'config.yaml') if config_path is None else config_path
 
-    print(f"[run_ingestion] Loading config from {config_path}") #debug print
-    with open(config_path, "r") as file:
-        config = yaml.safe_load(file)
+    demand_in = project_root / "data" / "processed" / "retail_volume_monthly_tidy.csv"
+    demand_out = project_root / "data" / "processed" / "demand_monthly.csv"
 
-    if not isinstance(config, dict):
-        raise ValueError(
-            f"Config file {config_path} is empty or not a YAML mapping."
-            f"Got: {config!r}"
-         )
-    return config
+    events_in = project_root / "data" / "processed" / "calendar_events_uk_weekly_1988_2025.csv"
+    events_out = project_root / "data" / "processed" / "events_monthly.csv"
 
-
-def run_all(config_path: Path | None = None) -> None: 
-    config = load_config(config_path)
-
-    d = config["demand"]
-    e = config["events"]
-
-    #build demand weekly
-    build_demand_weekly(
-        tidy_path=Path(d["in_file"]),
-        out_path=Path(d["out_file"]),
-        date_col=d.get("date_col", "date"),
-        category_col=d.get("category_col", "category"),
-        value_col=d.get("value_col", "value"),
-        monthly_to_weekly_method=d.get("monthly_to_weekly_method", "ffill"),
-        category_remap=d.get("category_remap"),
-    )
-
-    #build events weekly
-    build_events_weekly(
-        in_path=Path(e["in_file"]),
-        out_path=Path(e["out_file"]),
-        week_start_col=e.get("week_start_col", "week_start"),
-        dayfirst=bool(e.get("dayfirst", True)),
-    )
-
+    if not demand_in.exists():
+        raise FileNotFoundError(f"Demand input file not found: {demand_in}")
+    if not events_in.exists():
+        raise FileNotFoundError(f"Events input file not found: {events_in}")
     
+    build_demand_monthly(demand_in, demand_out)
+    build_events_monthly(events_in, events_out)
+
 if __name__ == "__main__":
-    #uses default project_root/config.yaml
-    run_all()
-    
+    main()

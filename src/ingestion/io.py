@@ -58,8 +58,6 @@ def write_csv(
     else:
         print(f"[write_csv] Wrote CSV file to {p.resolve()}")
 
-    df.to_csv(p, index=False)
-
     print(f"[write_csv] Wrote CSV file to {p.resolve()}")
 
 
