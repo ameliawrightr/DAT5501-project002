@@ -14,6 +14,11 @@ from .validation import (
     require_numeric_range,
 )
 
+from src.features.event_features import (
+    add_weekly_event_features,
+    add_monthly_event_features
+)
+
 #--------------------------------------------------------------------------------------------
 # INTERNAL HELPERS
 #--------------------------------------------------------------------------------------------
@@ -137,9 +142,90 @@ def build_demand_monthly(
     df_out = df.groupby(["date", "category"], as_index=False)["demand"].mean()
     require_unique_keys(df_out, ["date", "category"], "demand_monthly")
 
+    #add event features
+    #use src.features.event_features.add_monthly_event_features
+    #loads data/processed/events_monthly.csv by default
+
+    df_out = add_monthly_event_features(
+        df_out,
+        events=None, #helper loads events_monthly.csv
+        date_col="date" #mathches normalised date col
+    )
+
     #write out
     out_path = Path(out_path)
     write_csv(df_out, out_path, dataset_name="demand_monthly")
 
     return df_out
 
+
+#2. 
+def build_demand_weekly(
+    in_path: Path,
+    out_path: Path,
+    *,        
+    date_col: str = "date",
+    category_col: str = "category",
+    value_col: str = "volume_index",
+    category_remap: dict[str, str] | None = None,
+) -> pd.DataFrame:
+    """
+    Build weekly demand from pre cleaned input file
+    
+    Input columns:
+     - date (weekly date) (datetime)
+     - category (str)
+     - volume_index (numeric)
+     
+     Output columns:
+     - date (week start) (datetime)
+     - category (str)
+     - demand (numeric)
+     + weekly event feature columns from calendar_events_uk_weekly_1988_2025
+     """
+    
+    in_path = Path(in_path)
+    if not in_path.exists():
+        raise FileNotFoundError(f"Input demand file not found: {in_path}")
+    
+    df = pd.read_csv(in_path)
+
+    #validate required structure
+    require_columns(df, [date_col, category_col, value_col], "demand_weekly_input")
+    require_non_null(df, [date_col, category_col, value_col], "demand_weekly_input")
+
+    #standardise
+    df = df.rename(columns={value_col: "demand"}).copy()
+
+    df[date_col] = pd.to_datetime(df[date_col], errors="coerce")
+    require_non_null(df, [date_col], "demand_weekly_parsed")
+
+    #normalise to week start (Monday)
+    df["date"] = _week_start_monday(df[date_col])
+
+    df["category"] = df[category_col].astype(str).str.strip()
+    if category_remap:
+        df["category"] = df["category"].replace(category_remap)
+
+    df["demand"] = pd.to_numeric(df["demand"], errors="coerce")
+    require_non_null(df, ["demand"], "demand_weekly_numeric")
+
+    #ensure one row per (week, category)
+    df_out = df.groupby(["date", "category"], as_index=False)["demand"].mean()
+    require_unique_keys(df_out, ["date", "category"], "demand_weekly")
+
+    #add weekly event features
+    #use src.features.event_features.add_weekly_event_features
+    #loads data/processed/calendar_events_uk_weekly_1988_2025.csv by default
+
+    df_out = add_weekly_event_features(
+        df_out,
+        events=None, #helper loads calendar_events_uk_weekly_1988_2025.csv
+        date_col="date" #mathches normalised date col
+    )
+
+    #write out
+    out_path = Path(out_path)
+    write_csv(df_out, out_path, dataset_name="demand_weekly")
+
+    return df_out
