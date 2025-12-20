@@ -20,7 +20,7 @@ from .validation import (
 #--------------------------------------------------------------------------------------------
 
 #NEED TO CHECK THIS LIST IS COMPREHENSIVE ENOUGH <---
-_DATE_COL_CANDIDATES = ["Time Period","date", "time", "period", "month", "week", "index_date"]
+_DATE_COL_CANDIDATES = ["time_period","time period", "time", "period", "Time Period"]
 _VALUE_COL_CANDIDATES = ["value", "v4_0", "obs_value", "observation", "index", "sales"]
 #dont really get the relevance of value col candidates here
 
@@ -29,11 +29,17 @@ def _normalise_cols(df: pd.DataFrame) -> pd.DataFrame:
     df.columns = [str(c).strip().lower().replace(" ", "_") for c in df.columns]
     return df
 
+def _normalise_name(name: str) -> str:
+    return str(name).strip().lower().replace(" ", "_")
+
 def _find_first_col(df: pd.DataFrame, candidates: list[str]) -> str | None:
+    #try find first candidate col name in df.columns
+    #allow for normalisaiton (lowercase + underscores)
     cols = set(df.columns)
     for c in candidates:
-        if c in cols:
-            return c
+        norm = _normalise_name(c)
+        if norm in cols:
+            return norm
     return None
 
 def _parse_date_series(s: pd.Series) -> pd.Series:
