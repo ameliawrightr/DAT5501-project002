@@ -40,23 +40,18 @@ def read_csv_or_excel(
     )
 
 
-#3. Write a DataFrame to a Parquet file.
-def write_parquet(
+#3. Write a DataFrame to a CSV file.
+def write_csv(
         df: pd.DataFrame,
         out_path: str | Path,
-        *,
-        dataset_name: str | None = None
     ) -> None:
-    #write df as parquet, ensuring parent dirs exists
-    p = Path(out_path)
-    p.parent.mkdir(parents=True, exist_ok=True)
+    #write df as csv, ensuring parent dirs exists
+    out_path = Path(out_path)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
 
-    df.to_parquet(p, index=False)
+    df.to_csv(out_path, index=False)
 
-    if dataset_name:
-        print(f"[write_parquet] Wrote dataset '{dataset_name}' to {p.resolve()}")
-    else:
-        print(f"[write_parquet] Wrote Parquet file to {p.resolve()}")
+    print(f"[write_csv] Wrote CSV file to {out_path.resolve()}")
     
 
 

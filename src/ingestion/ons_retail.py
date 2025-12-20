@@ -6,7 +6,7 @@ from typing import Any
 
 import pandas as pd
 
-from .io import read_csv_or_excel, write_parquet
+from .io import read_csv_or_excel, write_csv, write_parquet
 from .validation import (
     require_columns,
     require_unique_keys,
@@ -423,11 +423,11 @@ def build_demand_weekly(
             f"[ons_retail] Dropped {before - after} rows with null demand values"
             f" from final weekly demand data"
         )
-        
+
     #final checks
     require_columns(df_weekly, ["week_start", "category", "demand"], "demand_weekly_final")
     require_unique_keys(df_weekly, ["week_start", "category"], "demand_weekly_final")
     require_non_null(df_weekly, ["week_start", "category", "demand"], "demand_weekly_final")
 
-    write_parquet(df_weekly, out_path, dataset_name="demand_weekly")
+    write_csv(df_weekly, out_path.with_suffix('.csv'))
     return df_weekly
