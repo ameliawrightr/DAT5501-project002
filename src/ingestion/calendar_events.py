@@ -12,7 +12,7 @@ from .validation import (
     require_non_null,
     require_numeric_range,  
 )
-from .io import write_parquet
+from .io import write_csv
 
 
 #1. construct weekly event indicators for event driven demand forecasting
@@ -69,19 +69,37 @@ def build_event_windows(
 
 #2. merge into single calendar events table and save
 def build_events_weekly(
+    in_path: Path,
     out_path: Path,
     *,
-    start: str,
-    end: str,  
+    week_start_col: str = "week_start",
+    dayfirst: bool = True,
 ) -> pd.DataFrame:
     """
     orchestrate construction and persistence of weekly event indicators
     """
-    df = build_event_windows(
-        start=start,
-        end=end
+    df = pd.read_csv(in_path, dtype=str)
+
+    require_columns(
+        df,
+        [week_start_col],
+        "events_weekly_raw"
     )
-    write_parquet(
+
+    #parse dd/mm/yyyy dates
+    df[week_start_col] = pd.to_datetime(
+        df[week_start_col],
+        dayfirst=dayfirst,
+        errors="coerce"
+    )
+
+    #stanardise column name
+    if week_start_col != "week_start":
+        df = df.rename(columns={week_start_col: "week_start"})
+
+    require_unique_keys(df, ["week_start"], "events_weekly")
+
+    write_csv(
         df,
         out_path,
         dataset_name="events_weekly"
@@ -90,7 +108,7 @@ def build_events_weekly(
 
 
 def main() -> None:
-    out_path = Path("data/processed/events_weekly.parquet")
+    out_path = Path("data/processed/events_weekly.csv")
 
     start = "1988-01-01"
     end = "2025-10-31"

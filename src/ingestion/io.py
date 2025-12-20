@@ -44,15 +44,22 @@ def read_csv_or_excel(
 def write_csv(
         df: pd.DataFrame,
         out_path: str | Path,
+        *,
+        dataset_name: str | None = None
     ) -> None:
     #write df as csv, ensuring parent dirs exists
-    out_path = Path(out_path)
-    out_path.parent.mkdir(parents=True, exist_ok=True)
+    p = Path(out_path)
+    p.parent.mkdir(parents=True, exist_ok=True)
 
-    df.to_csv(out_path, index=False)
+    df.to_csv(p, index=False)
 
-    print(f"[write_csv] Wrote CSV file to {out_path.resolve()}")
-    
+    if dataset_name:
+        print(f"[write_csv] Wrote {dataset_name!r} CSV file to {p.resolve()}")
+    else:
+        print(f"[write_csv] Wrote CSV file to {p.resolve()}")
 
+    df.to_csv(p, index=False)
+
+    print(f"[write_csv] Wrote CSV file to {p.resolve()}")
 
 

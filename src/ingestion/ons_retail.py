@@ -6,7 +6,7 @@ from typing import Any
 
 import pandas as pd
 
-from .io import read_csv_or_excel, write_csv, write_parquet
+from .io import write_csv
 from .validation import (
     require_columns,
     require_unique_keys,
@@ -109,7 +109,7 @@ def load_ons_retail_raw(
     if not path.exists():
         raise FileNotFoundError(f"ONS retail data file not found: {path}")
 
-    df = read_csv_or_excel(path, sheet_name=sheet_name, **kwargs)
+    df = read_excel(path, sheet_name=sheet_name, **kwargs)
     df = _normalise_cols(df)
 
     if df.empty:
@@ -366,68 +366,41 @@ def to_weekly_demand(
 
 #4. validate time series assumptions and save processed file
 def build_demand_weekly(
-    ons_path: Path,
-    mapping: dict[str, str],
+    tidy_path: Path,
     out_path: Path,
     *,
-    sheet_name: str | None = None,
-    agg: str = "mean",
+    date_col: str = "date",
+    category_col: str = "category",
+    value_col: str = "volume_index",
     monthly_to_weekly_method: str = "ffill",
-    reader_kwargs: dict[str, Any] | None = None,
+    category_remap: dict[str, str] | None = None,
 ) -> pd.DataFrame:
     """
-    Orchestrator for demand ingestion:
-      load raw -> map to categories -> convert to weekly -> validate -> save
-    
-    Parameters:
-     - ons_path : Path
-        Path to raw ONS retail data file
-     - mapping : dict[str, str]
-        Mapping from ONS series id to project category
-     - out_path : Path
-        Path to save processed parquet file
-     - sheet_name : str | None
-        optional sheet name for Excel files
-     - agg : str
-        weekly agg: "mean" or "sum"
-    - monthly_to_weekly_method : str
-        method to convert monthly data to weekly: "ffill" or "interpolate"
-    - reader_kwargs : dict | None
-        extra kwargs for pandas reader 
-
-    Returns:
-     - pd.DataFrame
-        weekly tidy demand:
-        - week_start (datetime)
-        - category (str)
-        - demand (float)
+    Read already-tidy monthly demand file (date, category, value),
+    convert to weekly (W-MON), and write demand_weekly.csv.
     """
-    reader_kwargs = reader_kwargs or {}
+    df = pd.read_csv(tidy_path)
 
-    df_raw = load_ons_retail_raw(ons_path, sheet_name=sheet_name, **reader_kwargs)
-    df_tidy = map_ons_to_categories(df_raw, mapping=mapping)
+    require_columns(df, [date_col, category_col, value_col], "retail_volume_monthly_tidy")
+    require_non_null(df, [date_col, category_col, value_col], "retail_volume_monthly_tidy")
+
+    if category_remap:
+        df[category_col] = df[category_col].replace(category_remap)
+
+    df_tidy = df_tidy.rename(columns={date_col: "date"})
     df_weekly = to_weekly_demand(
-        df_tidy,
+        df_tidy[["date", "category", "value"]],
         date_col="date",
         value_col="value",
-        agg=agg,
         monthly_to_weekly_method=monthly_to_weekly_method,
     )
 
-    #drop rows where demand is missing - junk/gaps
-    before = len(df_weekly)
+    #deal with NaNs, drop
     df_weekly = df_weekly.dropna(subset=["demand"]).copy()
-    after = len(df_weekly)
-    if before != after:
-        print(
-            f"[ons_retail] Dropped {before - after} rows with null demand values"
-            f" from final weekly demand data"
-        )
 
-    #final checks
-    require_columns(df_weekly, ["week_start", "category", "demand"], "demand_weekly_final")
-    require_unique_keys(df_weekly, ["week_start", "category"], "demand_weekly_final")
-    require_non_null(df_weekly, ["week_start", "category", "demand"], "demand_weekly_final")
+    require_unique_keys(df_weekly, ["week_start", "category"], "demand_weekly")
+    write_csv(df_weekly, out_path, dataset_name="demand_weekly")
 
-    write_csv(df_weekly, out_path.with_suffix('.csv'))
     return df_weekly
+   
+

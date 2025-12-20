@@ -1,7 +1,13 @@
-ons_retail:
-  file: /Users/amelia/DAT5501-project002/data/raw/ONS_UK_retail_sales_index_table1M.xlsx
-  sheet: "Table 1 M"
-  mapping:
-    "Non-Specialised Predominantly Non-Food Stores": "school_supplies"
-    "Sports Equipment, Games & Toys": "fitness_equipment"
-    "Computers & Telecomms Equipment": "electronics_accessories"
+demand:
+  in_file: data/processed/retail_volume_monthly_tidy.csv
+  date_col: date
+  category_col: category
+  value_col: volume_index
+  monthly_to_weekly_method: ffill
+  out_file: data/processed/retail_demand_weekly.csv
+
+events:
+  in_file: data/processed/calendar_events_uk_weekly_1988_2025.csv
+  out_file: data/processed/events_weekly.csv
+  week_start_col: week_start_col
+  dayfirst: true 
