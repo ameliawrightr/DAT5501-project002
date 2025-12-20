@@ -20,7 +20,7 @@ from .validation import (
 #--------------------------------------------------------------------------------------------
 
 #NEED TO CHECK THIS LIST IS COMPREHENSIVE ENOUGH <---
-_DATE_COL_CANDIDATES = ["time_period","time period", "time", "period", "Time Period"]
+_DATE_COL_CANDIDATES = ["time_period","time period", "time", "period", "Time Period", "date", "month", "week", "index_date"]
 _VALUE_COL_CANDIDATES = ["value", "v4_0", "obs_value", "observation", "index", "sales"]
 #dont really get the relevance of value col candidates here
 
@@ -204,7 +204,21 @@ def map_ons_to_categories(
 
     #WIDE FORMAT PATH
     df["date"] = _parse_date_series(df[date_col])
-    wide_cols = [c for c in df.columns if c != date_col]
+
+    #drop rows where date could not be parsed (header/footer/junk)
+    before = len(df)
+    df =df[~df["date"].isna()].copy()
+    after = len(df)
+    if after == 0:
+        raise ValueError(
+            "After parsing dates, all rows had invalid/NaT dates in wide format data."
+            "Check sheet and date column are correct."  
+        )
+    if before != after:
+        print(
+            f"[ons_retail] Dropped {before - after} rows with invalid dates from wide format data"
+            f"in wide-format ONS data"
+        )
 
     #mapping keys must correspond to wide column names
     map_norm = {str(k).strip().lower().replace(" ", "_"): v for k, v in mapping.items()}
@@ -400,6 +414,16 @@ def build_demand_weekly(
         monthly_to_weekly_method=monthly_to_weekly_method,
     )
 
+    #drop rows where demand is missing - junk/gaps
+    before = len(df_weekly)
+    df_weekly = df_weekly.dropna(subset=["demand"]).copy()
+    after = len(df_weekly)
+    if before != after:
+        print(
+            f"[ons_retail] Dropped {before - after} rows with null demand values"
+            f" from final weekly demand data"
+        )
+        
     #final checks
     require_columns(df_weekly, ["week_start", "category", "demand"], "demand_weekly_final")
     require_unique_keys(df_weekly, ["week_start", "category"], "demand_weekly_final")
