@@ -1,5 +1,5 @@
 ons_retail:
-  file: /Users/amelia/DAT5501-project002/data/raw/ONS_UK_retail_sales_index_complete_dataset.xlsx
+  file: /Users/amelia/DAT5501-project002/data/raw/ONS_UK_retail_sales_index_table1M.xlsx
   sheet: "Table 1 M"
   mapping:
     "Non-Specialised Predominantly Non-Food Stores": "school_supplies"

@@ -19,8 +19,10 @@ from .validation import (
 # INTERNAL HELPERS
 #--------------------------------------------------------------------------------------------
 
-_DATE_COL_CANDIDATES = ["date", "time", "period", "month", "week", "index_date"]
+#NEED TO CHECK THIS LIST IS COMPREHENSIVE ENOUGH <---
+_DATE_COL_CANDIDATES = ["Time Period","date", "time", "period", "month", "week", "index_date"]
 _VALUE_COL_CANDIDATES = ["value", "v4_0", "obs_value", "observation", "index", "sales"]
+#dont really get the relevance of value col candidates here
 
 def _normalise_cols(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
