@@ -3,6 +3,7 @@ from typing import Dict, Any, Tuple
 
 import pandas as pd
 import os
+import numpy as np 
 
 from src.models.backtest import (
     rolling_origin_backtest,
@@ -12,6 +13,11 @@ from src.models.baseline import (
     seasonal_naive,
     rolling_average,
     time_regression,
+)
+from src.models.event_models import (
+    EventModelConfig,
+    fit_event_model,
+    forecast_event_model
 )
 from src.ingestion.demand import load_weekly_demand
 
@@ -27,6 +33,104 @@ def tr_forecaster(history: pd.Series,horizon: int,**kwargs) -> pd.Series:
     forecast, _ = time_regression(history=history,horizon=horizon)
     return forecast
 
+def event_ridge_forecaster(
+        history: pd.Series,
+        horizon: int,
+        events: pd.DataFrame,
+        config: EventModelConfig | None = None,
+        **kwargs
+    ) -> pd.Series:
+    if config is None:
+        config = EventModelConfig(
+            model_type="ridge",
+            lags=(1,52),
+            include_trend=True,
+            include_weekofyear=True,
+            alpha=1.0,
+        )
+    
+    events = events.sort_index()
+
+    #sanity: history index must be subset of events index
+    if not history.index.isin(events.index).all():
+        missing = history.index[~history.index.isin(events.index)]
+        raise ValueError(f"Event DataFrame missing indices: {missing}")
+    
+    full_index = events.index
+    last_time = history.index[-1]
+    try:
+        pos = full_index.get_loc(last_time)
+    except KeyError:
+        raise ValueError(f"Last timestamp of history {last_time} not found in events index")
+    
+    future_index = full_index[pos+1 : pos+1 + horizon]
+
+    events_train = events.loc[history.index]
+    events_future = events.loc[future_index]
+
+    #fit on history + aligned events
+    result = fit_event_model(
+        y_train=history,
+        events_train=events_train,
+        config=config,
+    )
+    #forecast over future horizon
+    forecast = forecast_event_model(
+        result=result,
+        y_history=history,
+        events_future=events_future,
+    )
+
+    return forecast
+
+def event_rf_forecaster(
+        history: pd.Series,
+        horizon: int,
+        events: pd.DataFrame,
+        config: EventModelConfig | None = None,
+        **kwargs,
+    ) -> pd.Series:
+    if config is None:
+        config = EventModelConfig(
+            model_type="random_forest",
+            lags=(1,52),
+            include_trend=True,
+            include_weekofyear=True,
+            rf_n_estimators=300,
+            rf_max_depth=None,
+        )
+    
+    events = events.sort_index()
+
+    if not history.index.isin(events.index).all():
+        missing = history.index[~history.index.isin(events.index)]
+        raise ValueError(f"Event DataFrame missing indices: {missing}")
+    
+    full_index = events.index
+    last_time = history.index[-1]
+    try:
+        pos = full_index.get_loc(last_time)
+    except KeyError:
+        raise ValueError(f"Last timestamp of history {last_time} not found in events index")
+    
+    future_index = full_index[pos+1 : pos+1 + horizon]
+
+    events_train = events.loc[history.index]
+    events_future = events.loc[future_index]
+
+    result = fit_event_model(
+        y_train=history,
+        events_train=events_train,
+        config=config,
+    )
+    forecast = forecast_event_model(
+        result=result,
+        y_history=history,
+        events_future=events_future,
+    )
+
+    return forecast
+
 #------------------------------
 #Core backtest runner
 #------------------------------
@@ -38,8 +142,7 @@ def run_backtests_for_category(
         initial_train_size: int=60, #5 years of weekly data as initialwindow
         step_size: int=4, #1 month step size
 ) -> Dict[str, Tuple[pd.DataFrame, pd.DataFrame]]:
-    """
-    Run rolling origin backtests for multiple forecasting models on a given product category.
+    """Run rolling origin backtests for multiple forecasting models on a given product category.
 
     Parameters:
     - category: str
@@ -96,6 +199,20 @@ def run_backtests_for_category(
             "kwargs": {},
         },
     }
+
+    if event_flags is not None and not event_flags.empty:
+        models.update(
+            {
+                "event_ridge": {
+                    "forecaster": event_ridge_forecaster,
+                    "kwargs": {"events": event_flags},
+                },
+                "event_random_forest": {
+                    "forecaster": event_rf_forecaster,
+                    "kwargs": {"events": event_flags},
+                },
+            }
+        )
 
     results: Dict[str, Tuple[pd.DataFrame, pd.DataFrame]] = {}
 
