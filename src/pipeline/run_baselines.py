@@ -108,7 +108,7 @@ def main() -> None:
     categories = [
         "fitness_equipment",
         "school_supplies",
-        "electronics_accessories",
+        "electronic_goods",
     ]
 
     for category in categories:
