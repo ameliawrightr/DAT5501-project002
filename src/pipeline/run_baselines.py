@@ -50,6 +50,10 @@ def run_baselines_for_category(
     #enforce weekly frequency,then fill missing weeks with 0 demand
     y = df_cat["demand"].asfreq("W-MON").fillna(0)
 
+    #event flags - keep event columns, resampled to weekly freq and filled
+    event_cols = [col for col in df_cat.columns if col.startswith("is_")]
+    df_events = df_cat[event_cols].asfreq("W-MON").fillna(False)
+
     if test_weeks is None:
         test_weeks = max(4, len(y) // 4)
 
@@ -63,6 +67,10 @@ def run_baselines_for_category(
     y_test = y.iloc[-test_weeks:]
     horizon = len(y_test)
 
+    #align event flags to train/test
+    event_train = df_events.loc[y_train.index]
+    event_test = df_events.loc[y_test.index]
+
     print(f"\n Category: {category}")
     print(f"Train points: {len(y_train)}, Test points: {len(y_test)}")
 
@@ -72,6 +80,12 @@ def run_baselines_for_category(
     sn_errors = compute_errors(y_test, sn_forecast)
     print("\n Seasonal Naive Errors:")
     pprint(sn_errors)
+    print_event_window_errors(
+        model_name="Seasonal Naive",
+        y_true=y_test,
+        y_pred=sn_forecast,
+        event_test=event_test,
+    )
 
     #Baseline 2: Rolling Average
     ra_raw = rolling_average(y_train, window=rolling_window, horizon=horizon)
@@ -79,19 +93,30 @@ def run_baselines_for_category(
     ra_errors = compute_errors(y_test, ra_forecast)
     print("\n Rolling Average Errors:")
     pprint(ra_errors)
+    print_event_window_errors(
+        model_name="Rolling Average",
+        y_true=y_test,
+        y_pred=ra_forecast,
+        event_test=event_test,
+    )
 
     #Baseline 3: Time Regression
     y_train_clean = y_train.dropna()
     tr_forecast, _ = time_regression(
         history=y_train_clean, 
-        horizon=horizon
-        freq=freq, 
+        horizon=horizon, 
     )
 
     tr_forecast_aligned = tr_forecast.reindex(y_test.index)
     tr_errors = compute_errors(y_test, tr_forecast_aligned)
     print("\n Time Regression Errors:")
     pprint(tr_errors)
+    print_event_window_errors(
+        model_name="Time Regression",
+        y_true=y_test,
+        y_pred=tr_forecast_aligned,
+        event_test=event_test,
+    )
 
     #Quick plot of forecasts
     plt.figure(figsize=(12, 6))
@@ -132,6 +157,31 @@ def plot_baselines_zoomed(y_train, y_test, sn_forecast, ra_forecast, tr_forecast
     #plt.savefig(f"artifacts/baselines_{category}.png", dpi=300)
     plt.show()
 
+
+#Compute and print errors restricted to event weeks
+def print_event_window_errors(
+        model_name: str,
+        y_true: pd.Series,
+        y_pred: pd.Series,
+        event_test: pd.DataFrame,
+) -> None:
+    #Compute and print errors restricted to event weeks
+    masks = {
+        "Any event week": event_test.any(axis=1),
+        "New Year": event_test.get("is_new_year", pd.Series(False, index=event_test.index)),
+        "Back to School": event_test.get("is_back_to_school", pd.Series(False, index=event_test.index)),
+        "Exam Season": event_test.get("is_exam_season", pd.Series(False, index=event_test.index)),
+        "Q4 Holiday": event_test.get("is_q4_holiday", pd.Series(False, index=event_test.index)),
+    }
+
+    print(f"\n {model_name} Errors on Event Weeks:")
+    for label, mask in masks.items():
+        #ensure mask is Series aligned to y_true
+        mask = mask.reindex(y_true.index).fillna(False)
+        if not mask.any():
+            continue
+        errs = compute_errors(y_true[mask], y_pred[mask])
+        print(f" {label}: {errs}")
 
 
 def main() -> None:
