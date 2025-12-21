@@ -14,7 +14,10 @@ from src.models.baseline import (
 from src.models.forecasting_utils import align_predictions
 from src.evaluation.metrics import compute_errors
 
-#1. 
+#1.Baseline backtest chart - how models would have performed on last year
+#  - Train: full historical weekly demand to fit baselines (all weeks except last 52)
+#  - Test: last 52 weeks of demand
+#  - SN, RA, TR forecast for 52 week test period
 def run_baselines_for_category(
         category: str,
         demand_csv_path: str = "data/processed/demand_monthly.csv",
@@ -81,9 +84,10 @@ def run_baselines_for_category(
     y_train_clean = y_train.dropna()
     tr_forecast, _ = time_regression(
         history=y_train_clean, 
-        horizon=horizon, 
-        freq="W"
+        horizon=horizon
+        freq=freq, 
     )
+
     tr_forecast_aligned = tr_forecast.reindex(y_test.index)
     tr_errors = compute_errors(y_test, tr_forecast_aligned)
     print("\n Time Regression Errors:")
@@ -95,7 +99,7 @@ def run_baselines_for_category(
     plt.plot(y_test.index, y_test, label="Test / Actual", color="black")
     plt.plot(y_test.index, sn_forecast, label="Seasonal Naive Forecast", color="orange")
     plt.plot(y_test.index, ra_forecast, label="Rolling Average Forecast", color="green")
-    plt.plot(y_test.index, tr_forecast, label="Time Regression Forecast", color="red")
+    plt.plot(y_test.index, tr_forecast_aligned, label="Time Regression Forecast", color="red")
     plt.legend()
     plt.title(f"Baselines for Category: {category}")
     plt.xlabel("Date")
@@ -103,6 +107,32 @@ def run_baselines_for_category(
     plt.xticks(rotation=45)
     plt.tight_layout()
     plt.show()
+
+"""WORK ON THIS"""
+#Plot for zoomed test window
+def plot_baselines_zoomed(y_train, y_test, sn_forecast, ra_forecast, tr_forecast):
+    plt.figure(figsize=(12, 6))
+
+    #inc last 5 years of train for context
+    train_tail = y_train.iloc[-260:]
+    plt.plot(train_tail.index, train_tail, label="Train (last 5 years)", color="blue")
+    plt.plot(y_test.index, y_test, label="Test / Actual", color="black")
+    plt.plot(y_test.index, y_test, label="Test / Actual", color="black")
+
+    plt.plot(y_test.index, sn_forecast, label="Seasonal Naive Forecast", color="orange")
+    plt.plot(y_test.index, ra_forecast, label="Rolling Average Forecast", color="green")
+    plt.plot(y_test.index, tr_forecast, label="Time Regression Forecast", color="red")
+
+    plt.title("Baseline Forecasts for fitness_equipment (weekly) - Zoomed Test Period")
+    plt.xlabel("Week")
+    plt.ylabel("Demand")
+    plt.legend()
+    plt.xticks(rotation=45)
+    plt.tight_layout()
+    #plt.savefig(f"artifacts/baselines_{category}.png", dpi=300)
+    plt.show()
+
+
 
 def main() -> None:
     categories = [
@@ -113,6 +143,7 @@ def main() -> None:
 
     for category in categories:
         run_baselines_for_category(category)
+    
 
 if __name__ == "__main__":
     main()

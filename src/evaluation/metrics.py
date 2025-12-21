@@ -32,15 +32,18 @@ def compute_errors(y_true: pd.Series, y_pred: pd.Series) -> dict:
     mae = np.mean(np.abs(errors))
     rmse = np.sqrt(np.mean(errors ** 2))
 
-    #MAPE: avoid division by zero
-    non_zero = y_t != 0
-    if non_zero.any():
-        mape = np.mean(np.abs(errors[non_zero] / y_t[non_zero])) * 100
+    #sMAPE: symmetric MAPE to avoid division by zero issues
+    denom = np.abs(y_t) + np.abs(y_p)
+    non_zero_denom = denom != 0
+    if non_zero_denom.any():
+        smape = np.mean(
+            200 * np.abs(errors[non_zero_denom]) / denom[non_zero_denom]
+        )
     else:
-        mape = np.nan
+        smape = np.nan
 
     return {
         "MAE": mae,
         "RMSE": rmse,
-        "MAPE": mape
-    }   
+        "sMAPE": smape
+    }
