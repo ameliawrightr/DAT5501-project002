@@ -5,9 +5,9 @@ from __future__ import annotations
 import pandas as pd
 
 def load_weekly_demand(
-        path: str = "data/processed/demand_weekly.csv",
+        demand_csv_path: str = "data/processed/demand_monthly.csv",
     ) -> pd.DataFrame:
-    """Load weekly demand date
+    """Load weekly demand data
 
     Supports two common layouts:
     1. Long format with columns: week_start, category, demand
@@ -20,7 +20,7 @@ def load_weekly_demand(
     - pd.DataFrame
         Columns: week_start, category, demand
     """
-    df = pd.read_csv(path)
+    df = pd.read_csv(demand_csv_path)
 
     #1) find date column
     date_col = None

@@ -4,6 +4,7 @@ from pprint import pprint
 
 import matplotlib.pyplot as plt
 import pandas as pd
+import os
 
 from src.ingestion.demand import load_weekly_demand
 from src.models.baseline import (
@@ -14,7 +15,80 @@ from src.models.baseline import (
 from src.models.forecasting_utils import align_predictions
 from src.evaluation.metrics import compute_errors
 
-#1.Baseline backtest chart - how models would have performed on last year
+def pretty_print_errors(model_name: str, errors: dict) -> None:
+    #Nice formatted print of errors
+    mae = float(errors["MAE"])
+    rmse = float(errors["RMSE"])
+    smape = float(errors["sMAPE"])
+    print(f" {model_name:18s} | MAE: {mae:7.2f} | RMSE: {rmse:7.2f} | sMAPE: {smape:6.1f}%")
+
+
+#Compute and print errors restricted to event weeks
+def print_event_window_errors(
+        model_name: str,
+        y_true: pd.Series,
+        y_pred: pd.Series,
+        event_test: pd.DataFrame,
+) -> None:
+    #Compute and print errors restricted to event weeks
+    masks = {
+        "Any event week": event_test.any(axis=1),
+        "New Year": event_test.get("is_new_year_fitness", pd.Series(False, index=event_test.index)),
+        "Back to School": event_test.get("is_back_to_school", pd.Series(False, index=event_test.index)),
+        "Exam Season": event_test.get("is_exam_season", pd.Series(False, index=event_test.index)),
+        "Q4 Holiday": event_test.get("is_q4_holiday_electronics", pd.Series(False, index=event_test.index)),
+    }
+
+    print(f"\n {model_name} - Errors on Event Weeks:")
+    for label, mask in masks.items():
+        #ensure mask is Series aligned to y_true
+        mask = mask.reindex(y_true.index).fillna(False)
+        if not mask.any():
+            continue
+
+        errs = compute_errors(y_true[mask], y_pred[mask])
+        mae = float(errs["MAE"])
+        rmse = float(errs["RMSE"])
+        smape = float(errs["sMAPE"])
+        print(f" {label:16s} | MAE: {mae:7.2f} | RMSE: {rmse:7.2f} | sMAPE: {smape:6.1f}%")
+
+"""WORK ON THIS"""
+#Zoomed plot around last few years + test window so its readable
+def plot_baselines_zoomed(
+        category: str,
+        y_train: pd.Series, 
+        y_test: pd.Series, 
+        sn_forecast: pd.Series, 
+        ra_forecast: pd.Series, 
+        tr_forecast: pd.Series
+) -> None:
+    
+    plt.figure(figsize=(12, 6))
+
+    #inc last 5 years of train for context (5*52=260 weeks)
+    train_tail = y_train.iloc[-260:]
+    plt.plot(train_tail.index, train_tail, label="Train (last 5 years)", color="blue")
+    plt.plot(y_test.index, y_test, label="Test / Actual", color="black")
+
+    plt.plot(y_test.index, sn_forecast, label="Seasonal Naive Forecast", color="orange")
+    plt.plot(y_test.index, ra_forecast, label="Rolling Average Forecast", color="green")
+    plt.plot(y_test.index, tr_forecast, label="Time Regression Forecast", color="red")
+
+    plt.title(f"Baseline Forecasts for {category} (weekly) - Zoomed Test Period")
+    plt.xlabel("Week")
+    plt.ylabel("Demand")
+    plt.legend()
+    plt.xticks(rotation=45)
+    plt.tight_layout()
+
+    os.makedirs("artifacts", exist_ok=True)
+    plt.savefig(f"artifacts/baselines/baselines_{category}.png", dpi=300)
+
+    plt.show()
+
+
+#Baseline backtest chart - how models would have performed on last year
+"""Run baseline models for a single category and print metrics."""
 #  - Train: full historical weekly demand to fit baselines (all weeks except last 52)
 #  - Test: last 52 weeks of demand
 #  - SN, RA, TR forecast for 52 week test period
@@ -71,36 +145,22 @@ def run_baselines_for_category(
     event_train = df_events.loc[y_train.index]
     event_test = df_events.loc[y_test.index]
 
-    print(f"\n Category: {category}")
+    print(f"\nCategory: {category}")
     print(f"Train points: {len(y_train)}, Test points: {len(y_test)}")
 
-    #Baseline 1: Seasonal Naive
+    # ------ Baseline 1: Seasonal Naive ------
     sn_raw = seasonal_naive(y_train, seasonal_period=seasonal_period, horizon=horizon)
     sn_forecast = align_predictions(sn_raw, index=y_test.index)
     sn_errors = compute_errors(y_test, sn_forecast)
-    print("\n Seasonal Naive Errors:")
-    pprint(sn_errors)
-    print_event_window_errors(
-        model_name="Seasonal Naive",
-        y_true=y_test,
-        y_pred=sn_forecast,
-        event_test=event_test,
-    )
+   
 
-    #Baseline 2: Rolling Average
+    # ------ Baseline 2: Rolling Average ------
     ra_raw = rolling_average(y_train, window=rolling_window, horizon=horizon)
     ra_forecast = align_predictions(ra_raw, index=y_test.index)
     ra_errors = compute_errors(y_test, ra_forecast)
-    print("\n Rolling Average Errors:")
-    pprint(ra_errors)
-    print_event_window_errors(
-        model_name="Rolling Average",
-        y_true=y_test,
-        y_pred=ra_forecast,
-        event_test=event_test,
-    )
 
-    #Baseline 3: Time Regression
+
+    # ------ Baseline 3: Time Regression ------
     y_train_clean = y_train.dropna()
     tr_forecast, _ = time_regression(
         history=y_train_clean, 
@@ -109,79 +169,37 @@ def run_baselines_for_category(
 
     tr_forecast_aligned = tr_forecast.reindex(y_test.index)
     tr_errors = compute_errors(y_test, tr_forecast_aligned)
-    print("\n Time Regression Errors:")
-    pprint(tr_errors)
-    print_event_window_errors(
-        model_name="Time Regression",
-        y_true=y_test,
-        y_pred=tr_forecast_aligned,
-        event_test=event_test,
+   
+
+    # ------ Print Results ------
+    """ Overall errors """
+    print("\nOverall errors: ")
+    pretty_print_errors("Seasonal Naive", sn_errors)
+    pretty_print_errors("Rolling Average", ra_errors)
+    pretty_print_errors("Time Regression", tr_errors)
+
+    """ Event week errors """
+    print("\nEvent week errors:")
+    print_event_window_errors("Seasonal Naive", y_test, sn_forecast, event_test)
+    print_event_window_errors("Rolling Average", y_test, ra_forecast, event_test)
+    print_event_window_errors("Time Regression", y_test, tr_forecast_aligned, event_test)
+
+    # ------ Debug / sanity check for events in test ------
+    print("\n[DEBUG] event_test.head():")
+    print(event_test.head())
+    print("[DEBUG] Total event weeks in test set:", event_test.any(axis=1).sum())
+    print("[DEBUG] event_test.sum():")
+    print(event_test.sum())
+
+    # ------ Plot Zoomed Baseline Forecasts ------
+    plot_baselines_zoomed(
+        category=category,
+        y_train=y_train,
+        y_test=y_test,
+        sn_forecast=sn_forecast,
+        ra_forecast=ra_forecast,
+        tr_forecast=tr_forecast_aligned,
     )
-
-    #Quick plot of forecasts
-    plt.figure(figsize=(12, 6))
-    plt.plot(y_train.index, y_train, label="Train", color="blue")
-    plt.plot(y_test.index, y_test, label="Test / Actual", color="black")
-    plt.plot(y_test.index, sn_forecast, label="Seasonal Naive Forecast", color="orange")
-    plt.plot(y_test.index, ra_forecast, label="Rolling Average Forecast", color="green")
-    plt.plot(y_test.index, tr_forecast_aligned, label="Time Regression Forecast", color="red")
-    plt.legend()
-    plt.title(f"Baselines for Category: {category}")
-    plt.xlabel("Date")
-    plt.ylabel("Demand")
-    plt.xticks(rotation=45)
-    plt.tight_layout()
-    plt.show()
-
-"""WORK ON THIS"""
-#Plot for zoomed test window
-def plot_baselines_zoomed(y_train, y_test, sn_forecast, ra_forecast, tr_forecast):
-    plt.figure(figsize=(12, 6))
-
-    #inc last 5 years of train for context
-    train_tail = y_train.iloc[-260:]
-    plt.plot(train_tail.index, train_tail, label="Train (last 5 years)", color="blue")
-    plt.plot(y_test.index, y_test, label="Test / Actual", color="black")
-    plt.plot(y_test.index, y_test, label="Test / Actual", color="black")
-
-    plt.plot(y_test.index, sn_forecast, label="Seasonal Naive Forecast", color="orange")
-    plt.plot(y_test.index, ra_forecast, label="Rolling Average Forecast", color="green")
-    plt.plot(y_test.index, tr_forecast, label="Time Regression Forecast", color="red")
-
-    plt.title("Baseline Forecasts for fitness_equipment (weekly) - Zoomed Test Period")
-    plt.xlabel("Week")
-    plt.ylabel("Demand")
-    plt.legend()
-    plt.xticks(rotation=45)
-    plt.tight_layout()
-    #plt.savefig(f"artifacts/baselines_{category}.png", dpi=300)
-    plt.show()
-
-
-#Compute and print errors restricted to event weeks
-def print_event_window_errors(
-        model_name: str,
-        y_true: pd.Series,
-        y_pred: pd.Series,
-        event_test: pd.DataFrame,
-) -> None:
-    #Compute and print errors restricted to event weeks
-    masks = {
-        "Any event week": event_test.any(axis=1),
-        "New Year": event_test.get("is_new_year", pd.Series(False, index=event_test.index)),
-        "Back to School": event_test.get("is_back_to_school", pd.Series(False, index=event_test.index)),
-        "Exam Season": event_test.get("is_exam_season", pd.Series(False, index=event_test.index)),
-        "Q4 Holiday": event_test.get("is_q4_holiday", pd.Series(False, index=event_test.index)),
-    }
-
-    print(f"\n {model_name} Errors on Event Weeks:")
-    for label, mask in masks.items():
-        #ensure mask is Series aligned to y_true
-        mask = mask.reindex(y_true.index).fillna(False)
-        if not mask.any():
-            continue
-        errs = compute_errors(y_true[mask], y_pred[mask])
-        print(f" {label}: {errs}")
 
 
 def main() -> None:
@@ -197,3 +215,5 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
+
