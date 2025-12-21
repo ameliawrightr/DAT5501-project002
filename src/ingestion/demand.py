@@ -6,63 +6,64 @@ import pandas as pd
 
 def load_weekly_demand(
         demand_csv_path: str = "data/processed/demand_monthly.csv",
+        calendar_csv_path: str = "data/processed/calendar_events_uk_weekly_1988_2025.csv",
     ) -> pd.DataFrame:
-    """Load weekly demand data
+    """Build weekly demand with event flags from monthly demand + weekly calendar.
 
-    Supports two common layouts:
-    1. Long format with columns: week_start, category, demand
-    2. Wide format with week_start, fitness_equipment, electronics_accessories, school_supplies
+    Inputs:
+    - demand_monthly.csv: columns include
+        ['date', 'category', 'demand', 'is_new_year_fitness',
+         'is_back_to_school', 'is_exam_season', 'is_q4_holiday_electronics', ...]
+    - calendar_events_uk_weekly_1988_2025.csv: columns include
+        ['week_start', 'week_end', 'year', 'week_of_year',
+         'is_new_year_fitness', 'is_back_to_school', 'is_exam_season',
+         'is_q4_holiday_electronics', 'weeks_to_*', ...]
 
-    Parameters:
-    - path: str
-        Path to the CSV file
-    Returns:
-    - pd.DataFrame
-        Columns: week_start, category, demand
+    We:
+    - map each week to its calendar month,
+    - join monthly demand onto weeks by (month, category),
+    - split monthly demand evenly across the weeks of that month.
     """
-    df = pd.read_csv(demand_csv_path)
-
-    #1) find date column
-    date_col = None
-    for cand in ["week_start", "week", "week_commencing", "date"]:
-        if cand in df.columns:
-            date_col = cand
-            break
     
-    if date_col is None:
-        raise ValueError(
-            "No date column found in data."
-            "Expected one of: week_start, week, week_commencing, date"
-            f"Got: {df.columns.tolist()}"
-        )
+    #Load monthly demand
+    dm = pd.read_csv(demand_csv_path)
+    dm["date"] = pd.to_datetime(dm["date"])
+    dm["month"] = dm["date"].dt.to_period("M")
+
+    #keep only relevant from monhtly
+    dm = dm[["month", "category", "demand",
+             "is_new_year_fitness", "is_back_to_school",
+             "is_exam_season", "is_q4_holiday_electronics"]]
     
-    df[date_col] = pd.to_datetime(df[date_col])
-    df = df.rename(columns={date_col: "week_start"})
+    #Load weekly calendar
+    cal = pd.read_csv(
+        calendar_csv_path,
+        dayfirst=True,
+        parse_dates=["week_start", "week_end"],
+    )
+    cal["month"] = cal["week_start"].dt.to_period("M")
 
-    #2. if already long - tidy and return
-    if {"week_start", "category", "demand"}.issubset(df.columns):
-        out = df[["week_start", "category", "demand"]].copy()
-        out = out.sort_values("week_start")
-        return out
+    #Merge monthly demand onto weeks by (month, category)
+    weekly_demand = cal.merge(dm, on=["month"], how="left")
+
+    #convert monthly demand into weekly demand
+    weekly_demand["weeks_in_month"] = weekly_demand.groupby(["month", "category"])["week_start"].transform("nunique")
+    weekly_demand["demand"] = weekly_demand["demand"] / weekly_demand["weeks_in_month"]
+    weekly_demand = weekly_demand.drop(columns=["weeks_in_month"])
+
+    #ensure event flags are boolean
+    event_cols = [
+        "is_new_year_fitness",
+        "is_back_to_school",
+        "is_exam_season",
+        "is_q4_holiday_electronics",
+    ]
+    for col in event_cols:
+        if col in weekly_demand.columns:
+            weekly_demand[col] = weekly_demand[col].fillna(0).astype(bool)
+
+    #return tidy weekly DF
+    weekly_demand = weekly_demand.rename(columns={"week_start": "week_start"})
+    weekly_demand = weekly_demand[["week_start", "category", "demand"] + event_cols]
     
-    #3. else assume wide format: first col = date, other = categories
-    non_date_cols = [col for col in df.columns if col != "week_start"]
-
-    if len(non_date_cols) == 0:
-        raise ValueError(
-            "No demand columns found.",
-            "Expected either 'category'+'demand' or category columns per product."
-        )
-    
-    long_df = df.melt(
-        id_vars=["week_start"],
-        value_vars=non_date_cols,
-        var_name="category",
-        value_name="demand",    
-    ).dropna(subset=["demand"])
-
-    long_df = long_df.sort_values("week_start")
-
-    return long_df
-   
-   
+    return weekly_demand
