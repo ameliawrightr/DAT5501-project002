@@ -31,9 +31,7 @@ def load_weekly_demand(
     dm["month"] = dm["date"].dt.to_period("M")
 
     #keep only relevant from monhtly
-    dm = dm[["month", "category", "demand",
-             "is_new_year_fitness", "is_back_to_school",
-             "is_exam_season", "is_q4_holiday_electronics"]]
+    dm = dm[["month", "category", "demand"]]
     
     #Load weekly calendar
     cal = pd.read_csv(
@@ -51,15 +49,9 @@ def load_weekly_demand(
     weekly_demand["demand"] = weekly_demand["demand"] / weekly_demand["weeks_in_month"]
     weekly_demand = weekly_demand.drop(columns=["weeks_in_month"])
 
-    #ensure event flags are boolean
-    event_cols = [
-        "is_new_year_fitness",
-        "is_back_to_school",
-        "is_exam_season",
-        "is_q4_holiday_electronics",
-    ]
+    #detect event flag columns automatically
+    event_cols = [c for c in weekly_demand.columns if c.startswith("is_")]
     for col in event_cols:
-        if col in weekly_demand.columns:
             weekly_demand[col] = weekly_demand[col].fillna(0).astype(bool)
 
     #return tidy weekly DF
