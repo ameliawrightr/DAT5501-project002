@@ -161,3 +161,21 @@ def time_regression(
     forecast = pd.Series(y_pred, index=future_index)
 
     return forecast, model
+
+#Simple linear trend regression: demand ~ time_index
+#Returns forecast Series for test index
+def time_trend_regression_forecast(
+        train: pd.Series,
+        test: pd.DatetimeIndex,
+) -> pd.Series:
+    #encode time as sequential integers
+    t_train = np.arange(len(train))
+    t_test = np.arange(len(train), len(train) + len(test))
+
+    #fit linear trend
+    coeffs = np.polyfit(t_train, train.values, deg=1)
+    slope, intercept = coeffs
+
+    y_hat_test = intercept + slope * t_test
+    forecast = pd.Series(y_hat_test, index=test)
+    return forecast

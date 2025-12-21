@@ -72,7 +72,7 @@ def plot_baselines_zoomed(
 
     plt.plot(y_test.index, sn_forecast, label="Seasonal Naive Forecast", color="orange")
     plt.plot(y_test.index, ra_forecast, label="Rolling Average Forecast", color="green")
-    plt.plot(y_test.index, tr_forecast, label="Time Regression Forecast", color="red")
+    #plt.plot(y_test.index, tr_forecast, label="Time Regression Forecast", color="red")
 
     plt.title(f"Baseline Forecasts for {category} (weekly) - Zoomed Test Period")
     plt.xlabel("Week")
@@ -191,6 +191,7 @@ def run_baselines_for_category(
     print("[DEBUG] event_test.sum():")
     print(event_test.sum())
 
+    """ Old version
     # ------ Plot Zoomed Baseline Forecasts ------
     plot_baselines_zoomed(
         category=category,
@@ -200,8 +201,96 @@ def run_baselines_for_category(
         ra_forecast=ra_forecast,
         tr_forecast=tr_forecast_aligned,
     )
+    """
 
+    #return everything needed for plotting and downstream analysis
+    return {
+        "y_train": y_train,
+        "y_test": y_test,
+        "sn_forecast": sn_forecast,
+        "ra_forecast": ra_forecast,
+        "tr_forecast": tr_forecast_aligned,
+    }
 
+#Plot baseline forecasts for one category
+#  - last "train_years_to_show" weeks of training data
+#  - full test window
+def plot_baselines_single_category(
+        category: str,
+        y_train: pd.Series, 
+        y_test: pd.Series, 
+        sn_forecast: pd.Series, 
+        ra_forecast: pd.Series, 
+        train_years_to_show: int = 52,
+) -> None:
+    
+    # focus on last "train_years_to_show" weeks of training data
+    train_tail = y_train.iloc[-train_years_to_show:]
+
+    #compute y-lims based on train + test only
+    y_min = min(train_tail.min(), y_test.min())
+    y_max = max(train_tail.max(), y_test.max())
+    padding = 0.05 * (y_max - y_min)
+    y_min -= padding
+    y_max += padding
+
+    plt.figure(figsize=(12, 6))
+
+    #plot training history (last year)
+    plt.plot(train_tail.index, train_tail.values,
+             label="Train (last year)", linewidth=1.5)
+    
+    #plot test / actuals
+    plt.plot(y_test.index, y_test.values,
+             label="Test / Actual", linewidth=1.5, linestyle="-")
+    
+    #plot baselines on test period only
+    plt.plot(y_test.index, sn_forecast.values,
+             label="Seasonal Naive Forecast", linewidth=1.5, linestyle="--")
+    plt.plot(y_test.index, ra_forecast.values,
+             label="Rolling Average Forecast", linewidth=1.5, linestyle="--")
+    
+    plt.title(f"Baseline Forecasts for {category} (weekly)")
+    plt.xlabel("Week")
+    plt.ylabel("Demand")
+    plt.ylim(y_min, y_max)
+
+    plt.legend(loc="upper left")
+    plt.tight_layout()
+    plt.show()
+
+#def run_time_reg_forecast
+
+#Compare three event driven categories on one plot
+def plot_category_comparison(demand_fitness,
+                             demand_school,
+                             demand_electronics,
+                             start=None):
+    if start is not None:
+        demand_fitness = demand_fitness[demand_fitness.index >= start]
+        demand_school = demand_school[demand_school.index >= start]
+        demand_electronics = demand_electronics[demand_electronics.index >= start]
+
+    plt.figure(figsize=(12, 6))
+    plt.plot(demand_fitness.index, demand_fitness.values,
+             label="Fitness Equipment", color="blue")
+    plt.plot(demand_school.index, demand_school.values,
+             label="School Supplies", color="orange")
+    plt.plot(demand_electronics.index, demand_electronics.values,
+             label="Electronic Goods", color="green")
+
+    plt.title("Weekly Demand Comparison of Event-Driven Categories")
+    plt.xlabel("Week")
+    plt.ylabel("Demand")
+    plt.legend(loc="upper left")
+    plt.tight_layout()
+
+    os.makedirs("artifacts/baselines", exist_ok=True)
+    plt.savefig("artifacts/baselines/all_category_comparison.png", dpi=300)
+
+    plt.show()
+
+    
 def main() -> None:
     categories = [
         "fitness_equipment",
@@ -210,8 +299,22 @@ def main() -> None:
     ]
 
     for category in categories:
-        run_baselines_for_category(category)
+        results = run_baselines_for_category(category)
+        plot_baselines_single_category(
+            category,
+            y_train=results["y_train"],
+            y_test=results["y_test"],
+            sn_forecast=results["sn_forecast"],
+            ra_forecast=results["ra_forecast"],
+        )
+        
     
+    plot_category_comparison(
+        demand_fitness=load_weekly_demand().query("category == 'fitness_equipment'").set_index("week_start")["demand"],
+        demand_school=load_weekly_demand().query("category == 'school_supplies'").set_index("week_start")["demand"],
+        demand_electronics=load_weekly_demand().query("category == 'electronic_goods'").set_index("week_start")["demand"],
+        start="2018-01-01",
+    )
 
 if __name__ == "__main__":
     main()
