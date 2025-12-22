@@ -1,1 +1,0 @@
-# Backtest function returns df with sensible shapes and no NaNs in error columns
