@@ -1,5 +1,4 @@
 import pandas as pd
-import pytest
 from src.evaluation.metrics import compute_errors
 
 def test_compute_errors_perfect_forecast():
@@ -32,5 +31,14 @@ def test_compute_errors_constant_bias():
     # sMAPE should be > 0
     assert errors["sMAPE"] > 0
 
+#metrics test - sMAPE behaviour on simple known vectors
+def test_smape_behavior():
+    idx = pd.date_range(start='2020-01-01', periods=2, freq='D')
+    y_true = pd.Series([50 , 100], index=idx)
+    y_pred = pd.Series([100, 50], index=idx) 
+
+    errors = compute_errors(y_true, y_pred)
+    #sMAPE should be between 0 and 200 + finite
+    assert 0 <= errors['sMAPE'] <= 200
 
 

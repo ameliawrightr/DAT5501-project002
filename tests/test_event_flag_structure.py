@@ -13,7 +13,7 @@ def test_event_flags_structure():
         "is_new_year_fitness",
         "is_back_to_school",
         "is_exam_season",
-        "is_q4_holiday_electroncics",
+        "is_q4_holiday_electronics",
     }
     assert expected.issubset(set(event_cols))
 
@@ -24,7 +24,7 @@ def test_event_flags_structure():
 #test event flags aligned weekly
 def test_event_flags_aligned_weekly():
     df = load_weekly_demand("data/processed/demand_monthly.csv")
-    df = df.set_index("week_start").as_freq("W-MON")
+    df = df.set_index("week_start").asfreq("W-MON")
 
     event_cols = [c for c in df.columns if c.startswith("is_")]
 

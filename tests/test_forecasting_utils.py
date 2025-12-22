@@ -4,7 +4,7 @@ from src.models.forecasting_utils import align_predictions
 
 def test_align_predictions():
     #raw forecast with defaults RangeIndex
-    raw = pd.series([1,2,3])
+    raw = pd.Series([1,2,3])
     target_index = pd.date_range(start='2023-01-01', periods=3, freq='W-MON')
 
     aligned = align_predictions(raw, index=target_index)

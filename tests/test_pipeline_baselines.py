@@ -4,7 +4,7 @@
 
 from turtle import pd
 import pytest
-from evaluation.metrics import compute_errors
+from src.evaluation.metrics import compute_errors
 from src.pipeline.run_baselines import run_baselines_for_category
 
 def test_run_baselines_for_category():
@@ -38,14 +38,5 @@ def test_run_baselines_for_invalid_category():
             test_weeks=12
         )
 
-#metrics test - sMAPE behaviour on simple known vectors
-def test_smape_behavior():
-    idx = pd.date_range(start='2020-01-01', periods=2, freq='D')
-    y_true = pd.Series([50 , 100], index=idx)
-    y_pred = pd.Series([100, 50], index=idx) 
 
-    errors = compute_errors(y_true, y_pred)
-    #sMAPE should be between 0 and 200 + fin ite
-    assert 0 <= errors['sMAPE'] <= 200
 
-    
