@@ -1,23 +1,18 @@
-# def load_and_validate --> 
-"""
- - checks long format assumptions
- - standardises category names
- - sort and index time series
- - prepare for resampling
-"""
-
 import pandas as pd
 
+from src.ingestion.demand import load_weekly_demand
+
+#Load weekly demand dataset and validate it has required columns
 def load_and_validate(path: str) -> pd.DataFrame:
-    df = pd.read_csv(path)
-
-    required_cols = {"date", "category", "volume_index"}
-    assert required_cols.issubset(df.columns)
-
-    df["date"] = pd.to_datetime(df["date"])
-    df = df.sort_values(["category", "date"])
+    df = load_weekly_demand("data/processed/demand_monthly.csv")
     
-    assert not df.duplicated(["date", "category"]).any()
-    
-    return df
+    #basic expectations:
+    assert not df.empty
+    assert {"week_start", "category", "demand"}.issubset(df.columns)
+
+    #week_start should be datetime
+    assert pd.api.types.is_datetime64_any_dtype(df["week_start"])
+
+    #no negative demand
+    assert (df["demand"] >= 0).all()
 
