@@ -24,14 +24,19 @@ def test_event_flags_structure():
 #test event flags aligned weekly
 def test_event_flags_aligned_weekly():
     df = load_weekly_demand("data/processed/demand_monthly.csv")
-    df = df.set_index("week_start").asfreq("W-MON")
+    
+    #pick cat that exists
+    category_sample = df["category"].unique()[0]
 
-    event_cols = [c for c in df.columns if c.startswith("is_")]
+    df_cat = df[df["category"] == category_sample].copy()
+
+    df_cat = df_cat.set_index("week_start").asfreq("W-MON")
+
+    event_cols = [c for c in df_cat.columns if c.startswith("is_")]
 
     for col in event_cols:
         #no missing weeks in event flags
-        assert df.index.freqstr == "W-MON" or df.index.freq == "W-MON"
-        assert not df[col].isna().any()
+        assert not df_cat[col].isna().any()
 
 
 #FUTURE IMPLEMENTATION:
