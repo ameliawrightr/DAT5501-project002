@@ -16,12 +16,29 @@ from typing import Tuple
 import numpy as np
 import pandas as pd
 from sklearn.linear_model import LinearRegression
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import StandardScaler
+from sklearn.linear_model import Ridge
 
 from src.models.forecasting_utils import (
     make_lag_features, 
     make_time_features, 
     align_predictions
 )
+
+def _fourier_terms(
+        index: pd.DatetimeIndex,
+        period: int=52,
+        order: int=3,
+) -> np.ndarray:
+    #Fourier series terms for seasonality
+    t = np.arange(len(index), dtype=float)
+    terms = []
+    for k in range(1, order + 1):
+        terms.append(np.sin(2 * np.pi * k * t / period))
+        terms.append(np.cos(2 * np.pi * k * t / period))
+    return np.column_stack(terms)
+
 
 #1. Seasonal Naive Model
 def seasonal_naive(
@@ -99,8 +116,11 @@ def time_regression(
         history: pd.Series,
         horizon: int,
         freq: str | None = None,
+        seasonal_period: int=52,
+        fourier_order: int=3,
+        alpha: float=1.0,
 ) -> Tuple[pd.Series, LinearRegression]:
-    """Time Only Linear Regression Forecasting Model
+    """Time Only Linear Regression Forecasting Model:Trend + fourier seasonality
 
     Uses time-based features to predict future values via linear regression.
 
@@ -138,11 +158,19 @@ def time_regression(
             )
         freq = inferred
     
-    #build training feature matrix from existing dates
-    X_train = make_time_features(history.index)
     y_train = history.to_numpy(dtype=float)
+    
+    #Trend: sequential time index
+    t_train = np.arange(len(history), dtype=float).reshape(-1, 1)
+    seas_train = _fourier_terms(history.index, period=seasonal_period, order=fourier_order)
+    X_train = np.hstack([t_train, seas_train])
 
-    model = LinearRegression()
+    model = Pipeline(
+        steps = [
+            ("scaler", StandardScaler()),
+            ("regressor", Ridge(alpha=alpha)),
+        ]
+    ) 
     model.fit(X_train, y_train)
 
     #create future index
@@ -154,11 +182,14 @@ def time_regression(
     )
 
     #create future feature matrix
-    X_future = make_time_features(future_index)
+    t_future = np.arange(len(history), len(history) + horizon, dtype=float).reshape(-1, 1)
+    seas_future = _fourier_terms(future_index, period=seasonal_period, order=fourier_order)
+    X_future = np.hstack([t_future, seas_future])
+
     y_pred = model.predict(X_future)
 
     #generate forecasts
-    forecast = pd.Series(y_pred, index=future_index)
+    forecast = pd.Series(y_pred, index=future_index, name="time_regression_forecast")
 
     return forecast, model
 
