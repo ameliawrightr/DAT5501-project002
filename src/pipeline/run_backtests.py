@@ -4,6 +4,7 @@ from typing import Dict, Any, Tuple
 import pandas as pd
 import os
 import numpy as np 
+import time
 
 from src.models.backtest import (
     rolling_origin_backtest,
@@ -97,7 +98,10 @@ def event_rf_forecaster(
             include_trend=True,
             include_weekofyear=True,
             rf_n_estimators=300,
-            rf_max_depth=None,
+            rf_max_depth=12,
+            rf_min_samples_leaf=5,
+            rf_n_jobs=-1,
+            rf_random_state=42,
         )
     
     events = events.sort_index()
@@ -118,6 +122,8 @@ def event_rf_forecaster(
     events_train = events.loc[history.index]
     events_future = events.loc[future_index]
 
+    t0= time.time()
+
     result = fit_event_model(
         y_train=history,
         events_train=events_train,
@@ -128,7 +134,7 @@ def event_rf_forecaster(
         y_history=history,
         events_future=events_future,
     )
-
+    print(f"[Timing] RF fit: {time.time() - t0:.2f} seconds | n={len(history)}")
     return forecast
 
 #------------------------------
@@ -220,20 +226,30 @@ def run_backtests_for_category(
     os.makedirs(artifacts_dir, exist_ok=True)
 
     for model_name, spec in models.items():
+        cfg = config
+        if model_name == "event_random_forest":
+            cfg = BacktestConfig(
+                horizon=horizon,
+                initial_train_size=initial_train_size, #need at least 2 years for RF lags
+                step_size=12,
+            )
         forecaster = spec["forecaster"]
         kwargs = spec.get("kwargs", {})
 
         print(f"\n[Info] Running backtest for model: {model_name}")
 
         try:
+            t0 = time.time()
             detailed, aggregate = rolling_origin_backtest(
                 y=y,
                 forecaster=forecaster,
-                config=config,
+                config=cfg,
                 event_flags=event_flags,
                 model_name=model_name,
                 forecaster_kwargs=kwargs,
             )
+            dt = time.time() - t0
+            print(f"[Timing] {model_name} backtest completed in {dt:.2f} seconds")
         except ValueError as e:
             print(f"[Error] Backtest for model {model_name} failed: {e}")
             continue

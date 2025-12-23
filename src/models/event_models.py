@@ -63,9 +63,13 @@ class EventModelConfig:
     include_trend: bool = True
     include_weekofyear: bool = True
     alpha: float = 1.0
+
     rf_n_estimators: int = 100
     rf_max_depth: int | None = None
-
+    rf_min_samples_leaf: int = 5
+    rf_n_jobs: int = -1
+    rf_random_state: int = 42
+    
 @dataclass
 class EventModelForecast:
     """Container for event model forecast results.
@@ -218,7 +222,9 @@ def _build_regressor(config: EventModelConfig) -> RegressorMixin:
         model = RandomForestRegressor(
             n_estimators=config.rf_n_estimators,
             max_depth=config.rf_max_depth,
-            random_state=42
+            min_samples_leaf=config.rf_min_samples_leaf,
+            n_jobs=config.rf_n_jobs,
+            random_state=config.rf_random_state,
         )
     else:
         raise ValueError(
@@ -231,7 +237,7 @@ def fit_event_model(
         y_train: pd.Series,
         events_train: pd.DataFrame,
         config: EventModelConfig | None = None,
-) -> EventModelConfig:
+) -> EventModelForecast:
     """Fit event aware autoregressive model to training data.
     
     Parameters:
@@ -312,12 +318,10 @@ def _build_feature_row_for_forecast(
     features_dict: dict[str, float] = {}
 
     #1. Lag features 
-    #history_window assumed to be ordered from oldest to most recent
-    #take last max_lag entries as most recent history
+    #recent is last max_lag values, ordered oldest -> most recent
     recent = list(history_window)[-max_lag:]
-    for lag, value in zip(sorted(cfg.lags), reversed(recent)):
-        #reversed (recent) so lag_1 = last value, lag_2 = second last, etc.
-        features_dict[f"lag_{lag}"] = float(value)
+    for lag in cfg.lags:
+        features_dict[f"lag_{lag}"] = float(recent[-lag])
 
     #2. Event indicator features
     for col in event_row.index:
