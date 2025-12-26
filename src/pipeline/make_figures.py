@@ -154,53 +154,62 @@ def fig_event_vs_nonevent_mae(ev: pd.DataFrame) -> None:
         plt.savefig(out, dpi=200)
         plt.close()
 
-#3. Stability plot: per-origin MAE for baseline vs event_ridge
-def fig_origin_stability(detailed_paths: list[Path], highlight_models: list[str] | None = None) -> None:
-    #plot per-origin MAE lines (stability) for each category.
-    #uses detailed CSVs: compute MAE per origin_time.
+#3. Stability plot
+def fig_origin_stability(stab: pd.DataFrame) -> None:
+    #stability mfigure using summary per origin statistics
+    # show mean MAE per origin with errors bars (std) for key models
+    metric = "origin_MAE_mean"
+    err_metric = "origin_MAE_std"
+    pretty_metric = "Mean MAE per origin"
 
-    if highlight_models is None:
-        highlight_models = ["event_ridge", "event_random_forest"]
+    key_models = [
+        "seasonal_naive",
+        "rolling_average",
+        "event_ridge",
+        "event_random_forest",
+    ]
 
-    #find categories by scanning filenames
-    # - expects: <category>_<model>_detailed.csv
-    triples = []
-    for p in detailed_paths:
-        name = p.name.replace("_detailed.csv", "")
-        parts = name.split("_")
-        if len(parts) < 2:
-            continue
-        cat = parts[0]
-        model = "_".join(parts[1:])
-        triples.append((cat, model, p))
+    label_map = {
+        "seasonal_naive": "Seasonal Naive",
+        "rolling_average": "Rolling Average",
+        "event_ridge": "Event Ridge",
+        "event_random_forest": "Random Forest (event-aware)",
+    }
 
-    df_meta = pd.DataFrame(triples, columns=["category", "model", "path"])
-    for cat, gcat in df_meta.groupby("category"):
-        #only selected models if present
-        gsel = gcat[gcat["model"].isin(highlight_models)]
-        if gsel.empty:
-            continue
+    for cat, g in stab.groupby("category"):
+        g = g[g["model"].isin(key_models)].copy()
+        if g.empty:
+            continue 
 
-        plt.figure(figsize=(9, 4.8))
-        for _, row in gsel.iterrows():
-            df = pd.read_csv(row["path"])
-            df["origin_time"] = pd.to_datetime(df["origin_time"])
-            # per-origin MAE
-            per_origin = (
-                df.groupby("origin_time")[["y_true", "y_pred"]]
-                .apply(lambda x: np.mean(np.abs(x["y_true"].astype(float) - x["y_pred"].astype(float))))
-                .reset_index(name="origin_MAE")
-                .sort_values("origin_time")
+        g["model_label"] = g["model"].map(label_map).fillna(g["model"])
+        g = g.sort_values(metric, ascending=True)
+
+        x = np.arange(len(g), dtype=float)
+        values = g[metric].values
+        errors = g[err_metric].values
+
+        plt.figure(figsize=(8, 5))
+        plt.bar(x, values, yerr=errors, capsize=3)
+        plt.ylabel(pretty_metric)
+        plt.title(f"Forecast stability across origins — {cat}")
+        plt.xticks(x, g["model_label"], rotation=20, ha="right")
+
+        #label bars with mean MAE values
+        for i, v in enumerate(values):
+            plt.text(
+                x[i],
+                v + errors[i] + 0.3,
+                f"{v:.1f}",
+                ha="center",
+                va="bottom",
+                fontsize=8
             )
-            plt.plot(per_origin["origin_time"], per_origin["origin_MAE"], label=row["model"])
 
-        plt.ylabel("MAE per origin")
-        plt.title(f"Stability across backtest origins — {cat}")
-        plt.legend()
         plt.tight_layout()
         out = FIG_DIR / f"{cat}_origin_stability_mae.png"
         plt.savefig(out, dpi=200)
         plt.close()
+
 
 #4. One “forecast vs actual” plot during an event window for each category
 def fig_example_forecast_paths(category: str, model: str, n_origins: int = 6) -> None:
@@ -283,8 +292,8 @@ def main() -> None:
     fig_overall_mae_bar(overall)
     fig_event_vs_nonevent_mae(ev)
 
-    detailed_paths = [Path(p) for p in glob.glob(str(BACKTEST_DIR / "*_detailed.csv"))]
-    fig_origin_stability(detailed_paths)
+    stability = _load_summary("stability_metrics.csv")
+    fig_origin_stability(stability)
 
     #example forecast paths and event window plots
     examples = [
