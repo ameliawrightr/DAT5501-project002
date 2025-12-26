@@ -58,19 +58,19 @@ def fig_overall_mae_bar(overall: pd.DataFrame) -> None:
         "event_random_forest",
     ]
 
+    label_map = {
+            "seasonal_naive": "Seasonal Naive",
+            "rolling_average": "Rolling Average",
+            "event_ridge": "Event Ridge",
+            "event_random_forest": "Random Forest \n(event-aware)",
+        }
+    
     for cat, g in overall.groupby("category"):
         g = g[g["model"].isin(key_models)].copy()
         if g.empty:
             continue 
 
-        label_map = {
-            "seasonal_naive": "Seasonal Naive",
-            "rolling_average": "Rolling Average",
-            "event_ridge": "Event Ridge",
-            "event_random_forest": "Random Forest (event-aware)",
-        }
         g["model_label"] = g["model"].map(label_map).fillna(g["model"])
-
         g = g.sort_values(metric, ascending=True)
 
         x = np.arange(len(g), dtype=float)
@@ -80,13 +80,17 @@ def fig_overall_mae_bar(overall: pd.DataFrame) -> None:
         plt.bar(x, values)
         plt.ylabel(pretty_metric)
         plt.title(f"Overall {pretty_metric} by model — {cat}")
-        plt.xticks(x, g["model_label"], rotation=20, ha="right")
+        plt.xticks(x, g["model_label"], ha="center")
+        
+        #extend y-axis dynamically to fit labels
+        y_max = (values.max())
+        plt.ylim(0, y_max * 1.25)
 
         #add value labels on top of bars
         for i, v in enumerate(values):
             plt.text(
                 x[i],
-                v + 0.3,
+                v + 0.03 * y_max,
                 f"{v:.1f}",
                 ha="center",
                 va="bottom",
@@ -114,12 +118,12 @@ def fig_event_vs_nonevent_mae(ev: pd.DataFrame) -> None:
             continue
 
         #build arrays: [baseline, RF] x [event, non-event]
-        models_labels = ["Ridge (baseline)", "Random Forest (event-aware)"]
+        models_labels = ["Ridge \n(baseline)", "Random Forest \n(event-aware)"]
         x = np.arange(len(models_of_interest), dtype=float)
         width = 0.35
 
-        vals_event = []
-        vals_nonevent = []
+        vals_event: list[float] = []
+        vals_nonevent: list[float] = []
 
         for m in models_of_interest:
             gm = gcat[gcat["model"] == m]
@@ -135,19 +139,39 @@ def fig_event_vs_nonevent_mae(ev: pd.DataFrame) -> None:
         
         plt.ylabel(pretty_metric)
         plt.title(f"{pretty_metric}: event vs non-event — {cat}")
-        plt.xticks(x, models_labels, rotation=15, ha="right")
+        plt.xticks(x, models_labels, ha="center")
         plt.legend()
+
+        # Extend y-axis dynamically to fit labels + error bars
+        all_vals = [v for v in (vals_event + vals_nonevent) if not np.isnan(v)]
+        if all_vals:
+            y_max = max(all_vals)
+            plt.ylim(0, y_max * 1.25)
 
         #add value labels on top of bars
         for i, v in enumerate(vals_event):
             if np.isnan(v):
                 continue
-            plt.text(x[i] - width / 2, v + 0.3, f"{v:.1f}", ha="center", va="bottom", fontsize=8)
+            plt.text(
+                x[i] - width / 2, 
+                v + 0.02 * y_max, 
+                f"{v:.1f}", 
+                ha="center", 
+                va="bottom", 
+                fontsize=8
+            )
 
         for i, v in enumerate(vals_nonevent):
             if np.isnan(v):
                 continue
-            plt.text(x[i] + width / 2, v + 0.3, f"{v:.1f}", ha="center", va="bottom", fontsize=8)
+            plt.text(
+                x[i] + width / 2, 
+                v + 0.02 * y_max, 
+                f"{v:.1f}", 
+                ha="center", 
+                va="bottom", 
+                fontsize=8
+            )
 
         plt.tight_layout()
         out = FIG_DIR / f"{cat}_event_vs_nonevent_sMAPE.png"
@@ -173,7 +197,7 @@ def fig_origin_stability(stab: pd.DataFrame) -> None:
         "seasonal_naive": "Seasonal Naive",
         "rolling_average": "Rolling Average",
         "event_ridge": "Event Ridge",
-        "event_random_forest": "Random Forest (event-aware)",
+        "event_random_forest": "Random Forest \n(event-aware)",
     }
 
     for cat, g in stab.groupby("category"):
@@ -188,22 +212,26 @@ def fig_origin_stability(stab: pd.DataFrame) -> None:
         values = g[metric].values
         errors = g[err_metric].values
 
-        plt.figure(figsize=(8, 5))
+        plt.figure(figsize=(8, 4.5))
         plt.bar(x, values, yerr=errors, capsize=3)
         plt.ylabel(pretty_metric)
         plt.title(f"Forecast stability across origins — {cat}")
-        plt.xticks(x, g["model_label"], rotation=20, ha="right")
+        plt.xticks(x, g["model_label"], ha="center")
+
+        # Extend y-axis dynamically to fit labels + error bars
+        y_max = (values + errors).max()
+        plt.ylim(0, y_max * 1.15)
 
         #label bars with mean MAE values
         for i, v in enumerate(values):
             plt.text(
                 x[i],
-                v + errors[i] + 0.3,
+                v + errors[i] + 0.02 * y_max,
                 f"{v:.1f}",
                 ha="center",
                 va="bottom",
                 fontsize=8
-            )
+                )
 
         plt.tight_layout()
         out = FIG_DIR / f"{cat}_origin_stability_mae.png"
@@ -211,6 +239,7 @@ def fig_origin_stability(stab: pd.DataFrame) -> None:
         plt.close()
 
 
+#OPTIONAL / EXTRA FIGURES
 #4. One “forecast vs actual” plot during an event window for each category
 def fig_example_forecast_paths(category: str, model: str, n_origins: int = 6) -> None:
     #show multiple forecast paths (y_pred) vs actuals for a small number of origins.
