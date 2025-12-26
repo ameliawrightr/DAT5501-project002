@@ -1,8 +1,8 @@
 # Generate the 4 key figures
-#1. Bar chart: mean MAE by model for each category
-#2. Event vs non-event MAE (baseline vs event_ridge)
-#3. One “forecast vs actual” plot during an event window for each category
-#4. Stability plot: per-origin MAE for baseline vs event_ridge
+#1. Overall error by model (sMAPE)
+#2. Event vs non-event error (sMAPE)
+#3. Stability plot: per-origin error for baseline vs event_ridge
+#4. One “forecast vs actual” plot during an event window for each category
 
 from __future__ import annotations
 
@@ -45,50 +45,112 @@ def _event_cols(df: pd.DataFrame) -> list[str]:
 
 #1. Bar chart: mean MAE by model for each category
 def fig_overall_mae_bar(overall: pd.DataFrame) -> None:
-    #one figure per category, bar chart of MAE by model (sorted)
+    #overall error bar charts by model, using sMAPE (%)
+    #only plot key models to avoid clutter
+
+    metric = "sMAPE"
+    pretty_metric = "Mean sMAPE (%)"
+
+    key_models = [
+        "seasonal_naive",
+        "rolling_average",
+        "event_ridge",
+        "event_random_forest",
+    ]
+
     for cat, g in overall.groupby("category"):
-        g = g.sort_values("MAE", ascending=True).copy()
+        g = g[g["model"].isin(key_models)].copy()
+        if g.empty:
+            continue 
+
+        label_map = {
+            "seasonal_naive": "Seasonal Naive",
+            "rolling_average": "Rolling Average",
+            "event_ridge": "Event Ridge",
+            "event_random_forest": "Random Forest (event-aware)",
+        }
+        g["model_label"] = g["model"].map(label_map).fillna(g["model"])
+
+        g = g.sort_values(metric, ascending=True)
+
+        x = np.arange(len(g), dtype=float)
+        values = g[metric].values
+        
         plt.figure(figsize=(8, 4.5))
-        plt.bar(g["model"], g["MAE"])
-        plt.ylabel("Mean MAE")
-        plt.title(f"Overall MAE by model — {cat}")
-        plt.xticks(rotation=30, ha="right")
+        plt.bar(x, values)
+        plt.ylabel(pretty_metric)
+        plt.title(f"Overall {pretty_metric} by model — {cat}")
+        plt.xticks(x, g["model_label"], rotation=20, ha="right")
+
+        #add value labels on top of bars
+        for i, v in enumerate(values):
+            plt.text(
+                x[i],
+                v + 0.3,
+                f"{v:.1f}",
+                ha="center",
+                va="bottom",
+                fontsize=8
+            )
+
         plt.tight_layout()
-        out = FIG_DIR / f"{cat}_overall_mae_by_model.png"
+        out = FIG_DIR / f"{cat}_overall_sMAPE_by_model.png"
         plt.savefig(out, dpi=200)
         plt.close()
 
-#2. Event vs non-event MAE (baseline vs event_ridge)
+#2. Event vs non-event (baseline vs event_ridge)
 def fig_event_vs_nonevent_mae(ev: pd.DataFrame) -> None:
-    #for each category, compare MAE for event vs non-event weeks, grouped by model
+    #event vs non event error comparison (sMAPE) for two main models:
+    # baseline Ridge vs event-aware Random Forest
+    metric = "sMAPE"
+    pretty_metric = "Mean sMAPE (%)"
+
+    models_of_interest = ["event_ridge", "event_random_forest"]
+    subset_order = ["event_weeks", "non_event_weeks"]
+
     for cat, gcat in ev.groupby("category"):
-        models = list(gcat["model"].unique())
-        models.sort()
+        gcat = gcat[gcat["model"].isin(models_of_interest)].copy()
+        if gcat.empty:
+            continue
 
-        subset_order = ["event_weeks", "non_event_weeks"]
-        # positions
-        x = np.arange(len(models), dtype=float)
-        width = 0.38
+        #build arrays: [baseline, RF] x [event, non-event]
+        models_labels = ["Ridge (baseline)", "Random Forest (event-aware)"]
+        x = np.arange(len(models_of_interest), dtype=float)
+        width = 0.35
 
-        # build aligned arrays
         vals_event = []
-        vals_nonev = []
-        for m in models:
-            gm = gcat[gcat["model"] == m]
-            me = gm.loc[gm["subset"] == "event_weeks", "MAE"].values
-            mn = gm.loc[gm["subset"] == "non_event_weeks", "MAE"].values
-            vals_event.append(float(me[0]) if len(me) else np.nan)
-            vals_nonev.append(float(mn[0]) if len(mn) else np.nan)
+        vals_nonevent = []
 
-        plt.figure(figsize=(9, 4.8))
-        plt.bar(x - width/2, vals_event, width, label="Event weeks")
-        plt.bar(x + width/2, vals_nonev, width, label="Non-event weeks")
-        plt.ylabel("Mean MAE")
-        plt.title(f"Event vs non-event MAE — {cat}")
-        plt.xticks(x, models, rotation=30, ha="right")
+        for m in models_of_interest:
+            gm = gcat[gcat["model"] == m]
+            me = gm.loc[gm["subset"] == "event_weeks", metric].values
+            mn = gm.loc[gm["subset"] == "non_event_weeks", metric].values
+            vals_event.append(float(me[0]) if len(me) else np.nan)
+            vals_nonevent.append(float(mn[0]) if len(mn) else np.nan)
+
+        
+        plt.figure(figsize=(8, 4.5))
+        plt.bar(x - width / 2, vals_event, width, label="Event weeks")
+        plt.bar(x + width / 2, vals_nonevent, width, label="Non-event weeks")
+        
+        plt.ylabel(pretty_metric)
+        plt.title(f"{pretty_metric}: event vs non-event — {cat}")
+        plt.xticks(x, models_labels, rotation=15, ha="right")
         plt.legend()
+
+        #add value labels on top of bars
+        for i, v in enumerate(vals_event):
+            if np.isnan(v):
+                continue
+            plt.text(x[i] - width / 2, v + 0.3, f"{v:.1f}", ha="center", va="bottom", fontsize=8)
+
+        for i, v in enumerate(vals_nonevent):
+            if np.isnan(v):
+                continue
+            plt.text(x[i] + width / 2, v + 0.3, f"{v:.1f}", ha="center", va="bottom", fontsize=8)
+
         plt.tight_layout()
-        out = FIG_DIR / f"{cat}_event_vs_nonevent_mae.png"
+        out = FIG_DIR / f"{cat}_event_vs_nonevent_sMAPE.png"
         plt.savefig(out, dpi=200)
         plt.close()
 
@@ -98,7 +160,7 @@ def fig_origin_stability(detailed_paths: list[Path], highlight_models: list[str]
     #uses detailed CSVs: compute MAE per origin_time.
 
     if highlight_models is None:
-        highlight_models = ["seasonal_naive", "rolling_average", "event_ridge"]
+        highlight_models = ["event_ridge", "event_random_forest"]
 
     #find categories by scanning filenames
     # - expects: <category>_<model>_detailed.csv
