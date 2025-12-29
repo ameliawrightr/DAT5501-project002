@@ -191,17 +191,6 @@ def run_baselines_for_category(
     print("[DEBUG] event_test.sum():")
     print(event_test.sum())
 
-    """ Old version
-    # ------ Plot Zoomed Baseline Forecasts ------
-    plot_baselines_zoomed(
-        category=category,
-        y_train=y_train,
-        y_test=y_test,
-        sn_forecast=sn_forecast,
-        ra_forecast=ra_forecast,
-        tr_forecast=tr_forecast_aligned,
-    )
-    """
 
     #return everything needed for plotting and downstream analysis
     return {
@@ -210,54 +199,137 @@ def run_baselines_for_category(
         "sn_forecast": sn_forecast,
         "ra_forecast": ra_forecast,
         "tr_forecast": tr_forecast_aligned,
+        "event_test": event_test,
     }
 
 #Plot baseline forecasts for one category
-#  - last "train_years_to_show" weeks of training data
-#  - full test window
+#  - last "train_weeks_to_show" weeks of training data
+#  - test / actual
+# - baselines on test window only
+# - shading for event weeks
 def plot_baselines_single_category(
         category: str,
         y_train: pd.Series, 
         y_test: pd.Series, 
         sn_forecast: pd.Series, 
-        ra_forecast: pd.Series, 
-        train_years_to_show: int = 52,
+        ra_forecast: pd.Series,
+        tr_forecast: pd.Series | None = None,
+        event_test: pd.DataFrame | None = None,
+        train_weeks_to_show: int = 26,
 ) -> None:
-    
-    # focus on last "train_years_to_show" weeks of training data
-    train_tail = y_train.iloc[-train_years_to_show:]
 
-    #compute y-lims based on train + test only
-    y_min = min(train_tail.min(), y_test.min())
-    y_max = max(train_tail.max(), y_test.max())
+    # focus on last "train_weeks_to_show" weeks of training data
+    train_tail = y_train.iloc[-train_weeks_to_show:]
+
+    #compute y-lims based on train + test + forecasts 
+    all_vals = [
+        train_tail.min(), train_tail.max(),
+        y_test.min(), y_test.max(),
+        sn_forecast.min(), sn_forecast.max(),
+        ra_forecast.min(), ra_forecast.max(),
+    ]
+    if tr_forecast is not None:
+        all_vals.extend([tr_forecast.min(), tr_forecast.max()])
+
+    y_min = min(all_vals)
+    y_max = max(all_vals)
     padding = 0.05 * (y_max - y_min)
     y_min -= padding
     y_max += padding
 
-    plt.figure(figsize=(12, 6))
+    plt.figure(figsize=(10, 5))
 
-    #plot training history (last year)
-    plt.plot(train_tail.index, train_tail.values,
-             label="Train (last year)", linewidth=1.5)
+    #1. plot training history 
+    plt.plot(
+        train_tail.index, 
+        train_tail.values,
+        color="0.8",
+        linewidth=1.2,
+        label="Train (last weeks)"
+    )
+
+    #2. plot test / actuals
+    plt.plot(
+        y_test.index, 
+        y_test.values,
+        color='black',
+        linewidth=2.0,
+        label="Test / Actual",
+    )
     
-    #plot test / actuals
-    plt.plot(y_test.index, y_test.values,
-             label="Test / Actual", linewidth=1.5, linestyle="-")
+    #3. plot baselines on test period only
+    plt.plot(
+        y_test.index, 
+        sn_forecast.values,
+        label="Seasonal Naive", 
+        linewidth=1.4, 
+        linestyle="--")
+    plt.plot(
+        y_test.index, 
+        ra_forecast.values,
+        label="Rolling Average", 
+        linewidth=1.5, 
+        linestyle=":")
+
+    if tr_forecast is not None:
+        plt.plot(
+            y_test.index, 
+            tr_forecast.values,
+            label="Time Regression", 
+            linewidth=1.4, 
+            linestyle="-.",
+        )
+        
+    #4. shading for event weeks
+    if event_test is not None:
+        any_event = event_test.any(axis=1)
+        in_event = False
+        start = None
+        for idx, is_event in any_event.items():
+            if is_event and not in_event:
+                #start of event
+                start = idx
+                in_event = True
+            elif not is_event and in_event:
+                #end of event
+                plt.axvspan(
+                    start,
+                    prev_idx,
+                    color="lightgrey",
+                    alpha=0.2,
+                )
+                in_event = False
+            prev_idx = idx
+        if in_event:
+            #close off last event if it goes to end
+            plt.axvspan(
+                start,
+                prev_idx,
+                color="lightgrey",
+                alpha=0.2,
+            )
     
-    #plot baselines on test period only
-    plt.plot(y_test.index, sn_forecast.values,
-             label="Seasonal Naive Forecast", linewidth=1.5, linestyle="--")
-    plt.plot(y_test.index, ra_forecast.values,
-             label="Rolling Average Forecast", linewidth=1.5, linestyle="--")
-    
-    plt.title(f"Baseline Forecasts for {category} (weekly)")
+    #5. focus x axis on last bit of train + full test
+    start = train_tail.index[0]
+    end = y_test.index.max()
+    plt.xlim(start, end)
+
+    plt.ylim(y_min, y_max)
+    plt.title(f"Baseline forecasts vs actual - {category}")
     plt.xlabel("Week")
     plt.ylabel("Demand")
-    plt.ylim(y_min, y_max)
-
+    plt.text(
+        y_test.index[2], y_max - 0.5,
+        "New Year Window",
+        fontsize=9, color="grey",
+    )
     plt.legend(loc="upper left")
     plt.tight_layout()
-    plt.show()
+
+    os.makedirs("artifacts/baselines", exist_ok=True)
+    out_path = (f"artifacts/baselines/baselines_{category}_test_window.png")
+    plt.savefig(out_path, dpi=300)
+    plt.close()
 
 #def run_time_reg_forecast
 
@@ -288,10 +360,13 @@ def plot_category_comparison(demand_fitness,
     os.makedirs("artifacts/baselines", exist_ok=True)
     plt.savefig("artifacts/baselines/all_category_comparison.png", dpi=300)
 
-    plt.show()
+    plt.close()
+
 
     
 def main() -> None:
+    demand_csv_path = "data/processed/demand_monthly.csv"
+
     categories = [
         "fitness_equipment",
         "school_supplies",
@@ -299,20 +374,28 @@ def main() -> None:
     ]
 
     for category in categories:
-        results = run_baselines_for_category(category)
+        results = run_baselines_for_category(
+            category,
+            demand_csv_path=demand_csv_path,
+        )
         plot_baselines_single_category(
             category,
             y_train=results["y_train"],
             y_test=results["y_test"],
             sn_forecast=results["sn_forecast"],
             ra_forecast=results["ra_forecast"],
+            tr_forecast=results["tr_forecast"],
+            event_test=results["event_test"],
         )
-        
+
+    #load full demand data for comparison plot
+    df_all = load_weekly_demand(demand_csv_path).copy()
+    df_all = df_all.set_index("week_start")
     
     plot_category_comparison(
-        demand_fitness=load_weekly_demand().query("category == 'fitness_equipment'").set_index("week_start")["demand"],
-        demand_school=load_weekly_demand().query("category == 'school_supplies'").set_index("week_start")["demand"],
-        demand_electronics=load_weekly_demand().query("category == 'electronic_goods'").set_index("week_start")["demand"],
+        demand_fitness=df_all.query("category == 'fitness_equipment'")["demand"],
+        demand_school=df_all.query("category == 'school_supplies'")["demand"],
+        demand_electronics=df_all.query("category == 'electronic_goods'")["demand"],
         start="2018-01-01",
     )
 
