@@ -134,7 +134,7 @@ def event_rf_forecaster(
         y_history=history,
         events_future=events_future,
     )
-    print(f"[Timing] RF fit: {time.time() - t0:.2f} seconds | n={len(history)}")
+    #print(f"[Timing] RF fit: {time.time() - t0:.2f} seconds | n={len(history)}")
     return forecast
 
 #------------------------------
@@ -249,7 +249,7 @@ def run_backtests_for_category(
                 forecaster_kwargs=kwargs,
             )
             dt = time.time() - t0
-            print(f"[Timing] {model_name} backtest completed in {dt:.2f} seconds")
+            #print(f"[Timing] {model_name} backtest completed in {dt:.2f} seconds")
         except ValueError as e:
             print(f"[Error] Backtest for model {model_name} failed: {e}")
             continue
