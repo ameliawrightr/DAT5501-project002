@@ -95,9 +95,9 @@ def plot_baselines_zoomed(
 def run_baselines_for_category(
         category: str,
         demand_csv_path: str = "data/processed/demand_monthly.csv",
-        seasonal_period: int = 52,
-        rolling_window: int = 12,
-        test_weeks: int | None = 52,
+        seasonal_period: int = 12, #monthly seasonality
+        rolling_window: int = 3, #3 months rolling average
+        test_periods: int = 24, #test on last 24 weeks (~6 months)
 ) -> None:
     """Run baselines models for single product category and print metrics
     
@@ -113,36 +113,23 @@ def run_baselines_for_category(
     - test_weeks: int | None
         Number of weeks to test on (default: 52)
     """
-    df = load_weekly_demand(demand_csv_path)
+    df = pd.read_csv(demand_csv_path, parse_dates=["date"])    
 
     df_cat = df[df["category"] == category].copy()
-    if df_cat.empty:
-        raise ValueError(f"No data found for category: {category}")
-    
-    df_cat = df_cat.set_index("week_start")
+    df_cat = df_cat.sort_values("date").set_index("date")
 
-    #enforce weekly frequency,then fill missing weeks with 0 demand
-    y = df_cat["demand"].asfreq("W-MON").fillna(0)
+    #enforce monthly freq at month start
+    y = df_cat["demand"].asfreq("MS")
 
-    #event flags - keep event columns, resampled to weekly freq and filled
+    #event flags - make sure exist as month based cols
     event_cols = [col for col in df_cat.columns if col.startswith("is_")]
-    df_events = df_cat[event_cols].asfreq("W-MON").fillna(False)
+    df_events = df_cat[event_cols].asfreq("MS").fillna(False)
 
-    if test_weeks is None:
-        test_weeks = max(4, len(y) // 4)
-
-    if len(y) <= test_weeks + seasonal_period:
-        raise ValueError(
-            f"Not enough data for category {category} to run baselines with "
-            f"{test_weeks} test weeks and seasonal period {seasonal_period}."
-        )
-    
-    y_train = y.iloc[:-test_weeks]
-    y_test = y.iloc[-test_weeks:]
+    y_train = y.iloc[:-test_periods]
+    y_test = y.iloc[-test_periods:]
     horizon = len(y_test)
 
     #align event flags to train/test
-    event_train = df_events.loc[y_train.index]
     event_test = df_events.loc[y_test.index]
 
     print(f"\nCategory: {category}")
