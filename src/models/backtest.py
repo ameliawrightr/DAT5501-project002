@@ -70,14 +70,25 @@ def rolling_origin_backtest(
 
     if not isinstance(y, pd.Series):
         raise TypeError("y must be a pandas Series.")
+    if not isinstance(y.index, pd.DatetimeIndex):
+        raise TypeError("y must have a DatetimeIndex.")
+    if y.index.has_duplicates:
+        raise ValueError("y index contains duplicate timestamps.")
     
     #ensure time index is sorted
     y = y.sort_index()
 
     n_obs = len(y)
-    horizon = config.horizon
-    initial_train_size = config.initial_train_size
-    step_size = config.step_size
+    horizon = int(config.horizon)
+    initial_train_size = int(config.initial_train_size)
+    step_size = int(config.step_size)
+
+    if horizon <= 0:
+        raise ValueError("config.horizon must be a positive integer.")
+    if initial_train_size <= 0:
+        raise ValueError("config.initial_train_size must be a positive integer.")
+    if step_size <= 0:
+        raise ValueError("config.step_size must be a positive integer.")
 
     if n_obs < initial_train_size + horizon:
         raise ValueError(
@@ -90,6 +101,8 @@ def rolling_origin_backtest(
         #align and ensure boolean
         if not isinstance(event_flags, pd.DataFrame):
             raise TypeError("event_flags must be a pandas DataFrame.")
+        if not isinstance(event_flags.index, pd.DatetimeIndex):
+            raise TypeError("event_flags must have a DatetimeIndex.")   
         event_flags = event_flags.reindex(y.index).fillna(False).astype(bool)
 
     detailed_rows: List[Dict[str, Any]] = []
@@ -154,14 +167,9 @@ def rolling_origin_backtest(
 
             #include event flags if provided
             if event_flags is not None:
-                if ts in event_flags.index:
-                    for col in event_flags.columns:
-                        row[col] = bool(event_flags.loc[ts, col])
-                else:
-                    #if ts not in idx, default False
-                    for col in event_flags.columns:
-                        row[col] = False
-
+                flags_row = event_flags.loc[ts]
+                for col in event_flags.columns:
+                    row[col] = bool(flags_row[col])
             detailed_rows.append(row)
     
     detailed_results = pd.DataFrame(detailed_rows)
@@ -171,11 +179,11 @@ def rolling_origin_backtest(
     if not detailed_results.empty:
         detailed_results = detailed_results.sort_values(
             by=["forecast_time", "origin_time", "horizon_step"]
-        )
+        ).reset_index(drop=True)
     
     if not aggregate_results.empty:
         aggregate_results = aggregate_results.sort_values(
             by=["origin_time"]
-        )
+        ).reset_index(drop=True)
 
     return detailed_results, aggregate_results

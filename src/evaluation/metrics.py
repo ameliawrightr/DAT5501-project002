@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 
 def compute_errors(y_true: pd.Series, y_pred: pd.Series) -> dict:
-    """Compute basic forecast error metrics: MAE, RMSE, MAPE.
+    """Compute basic forecast error metrics: MAE, RMSE, sMAPE.
     Assume y_true and y_pred are aligned pd.Series."""
     if not isinstance(y_true, pd.Series) or not isinstance(y_pred, pd.Series):
         raise TypeError("y_true and y_pred must be pandas Series.")

@@ -118,7 +118,7 @@ def fig_event_vs_nonevent_mae(ev: pd.DataFrame) -> None:
             continue
 
         #build arrays: [baseline, RF] x [event, non-event]
-        models_labels = ["Ridge \n(baseline)", "Random Forest \n(event-aware)"]
+        models_labels = ["Event Ridge", "Event Random Forest"]
         x = np.arange(len(models_of_interest), dtype=float)
         width = 0.35
 

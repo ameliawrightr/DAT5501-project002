@@ -145,7 +145,7 @@ def run_backtests_for_category(
         category: str,
         demand_csv_path: str = "data/processed/demand_monthly.csv",
         horizon: int=4,
-        initial_train_size: int=60, #5 years of weekly data as initialwindow
+        initial_train_size: int=260, #5 years of weekly data as initial window
         step_size: int=4, #1 month step size
 ) -> Dict[str, Tuple[pd.DataFrame, pd.DataFrame]]:
     """Run rolling origin backtests for multiple forecasting models on a given product category.
@@ -176,12 +176,12 @@ def run_backtests_for_category(
     df_cat = df_cat.set_index("week_start")
 
     #demand series (weekly, fill missing weeks with 0)
-    y = df_cat["demand"].asfreq("W-MON").fillna(0)
+    y = df_cat["demand"].astype(float).sort_index()
 
     #event flags (col starting with 'is_', resampled to weekly)
     event_cols = [col for col in df_cat.columns if col.startswith("is_")]
     if event_cols:
-        event_flags = df_cat[event_cols].asfreq("W-MON").fillna(0)
+        event_flags = df_cat[event_cols].astype(bool).sort_index()
     else:
         event_flags = None
 

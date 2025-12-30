@@ -178,11 +178,11 @@ def run_event_models_pipeline(
 
     if df_cat.empty:
         raise ValueError(f"No data found for category: {category}")
-    
-    df_cat.set_index("week_start", inplace=True)
+
+    df_cat = df_cat.sort_values("week_start").set_index("week_start")
 
     #Target variable
-    y = df_cat["demand"].asfreq("W-MON").fillna(0.0)
+    y = df_cat["demand"].astype(float).sort_index()
 
     #Event indicators
     event_cols = [c for c in df_cat.columns if c.startswith("is_")]

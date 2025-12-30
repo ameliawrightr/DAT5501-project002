@@ -174,7 +174,9 @@ def build_autoreg_event_training_matrix(
     for col in event_features.columns:
         if event_features[col].dtype == bool:
             event_features[col] = event_features[col].astype(int)
-    feature_frames.append(event_features)
+        else:
+            event_features[col] = pd.to_numeric(event_features[col], errors="raise")
+    feature_frames.append(event_features.astype(float))
 
     #3. Time trend feature
     if config.include_trend:
@@ -387,6 +389,11 @@ def forecast_event_model(
     #mutable list of history values
     history_values: List[float] = list(y_history.astype(float).values)
 
+    if len(history_values) < max_lag:
+        raise ValueError(
+            f"y_history must have at least {max_lag} points for lags={cfg.lags}."
+        )
+    
     preds: List[float] = []
 
     #time index continues from end of y_history
