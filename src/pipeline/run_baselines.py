@@ -15,13 +15,13 @@ from src.models.baseline import (
 from src.models.forecasting_utils import align_predictions
 from src.evaluation.metrics import compute_errors
 
+#Nice formatted print of errors
 def pretty_print_errors(model_name: str, errors: dict) -> None:
     #Nice formatted print of errors
     mae = float(errors["MAE"])
     rmse = float(errors["RMSE"])
     smape = float(errors["sMAPE"])
     print(f" {model_name:18s} | MAE: {mae:7.2f} | RMSE: {rmse:7.2f} | sMAPE: {smape:6.1f}%")
-
 
 #Compute and print errors restricted to event weeks
 def print_event_window_errors(
@@ -47,10 +47,9 @@ def print_event_window_errors(
             continue
 
         errs = compute_errors(y_true[mask], y_pred[mask])
-        mae = float(errs["MAE"])
-        rmse = float(errs["RMSE"])
-        smape = float(errs["sMAPE"])
-        print(f" {label:16s} | MAE: {mae:7.2f} | RMSE: {rmse:7.2f} | sMAPE: {smape:6.1f}%")
+        pretty_print_errors(label, errs)
+
+        print(f"\n {model_name} - Errors on Event Weeks:")
 
 """WORK ON THIS"""
 #Zoomed plot around last few years + test window so its readable
@@ -95,10 +94,10 @@ def plot_baselines_zoomed(
 def run_baselines_for_category(
         category: str,
         demand_csv_path: str = "data/processed/demand_monthly.csv",
-        seasonal_period: int = 12, #monthly seasonality
-        rolling_window: int = 3, #3 months rolling average
-        test_periods: int = 24, #test on last 24 weeks (~6 months)
-) -> None:
+        seasonal_period: int = 52, #weekly seasonality
+        rolling_window: int = 12, #3 months rolling average
+        test_weeks: int = 52, #test on last 52 weeks
+) -> dict:
     """Run baselines models for single product category and print metrics
     
     Parameters:
@@ -113,24 +112,26 @@ def run_baselines_for_category(
     - test_weeks: int | None
         Number of weeks to test on (default: 52)
     """
-    df = pd.read_csv(demand_csv_path, parse_dates=["date"])    
-
+    df = load_weekly_demand(demand_csv_path)   
     df_cat = df[df["category"] == category].copy()
-    df_cat = df_cat.sort_values("date").set_index("date")
+    if df_cat.empty:
+        raise ValueError(f"No data found for category '{category}' in {demand_csv_path}")
 
-    #enforce monthly freq at month start
-    y = df_cat["demand"].asfreq("MS")
+    df_cat = df_cat.sort_values("week_start").set_index("week_start")
 
-    #event flags - make sure exist as month based cols
+    #dont need to asfreq - loader already gives monday start weekly freq
+    y = df_cat["demand"].astype(float)
+
+    #event flags - make sure exist as week based cols
     event_cols = [col for col in df_cat.columns if col.startswith("is_")]
-    df_events = df_cat[event_cols].asfreq("MS").fillna(False)
+    df_events = df_cat[event_cols].astype(bool) if event_cols else pd.DataFrame(index=y.index)
 
-    y_train = y.iloc[:-test_periods]
-    y_test = y.iloc[-test_periods:]
+    y_train = y.iloc[:-test_weeks]
+    y_test = y.iloc[-test_weeks:]
     horizon = len(y_test)
 
     #align event flags to train/test
-    event_test = df_events.loc[y_test.index]
+    event_test = df_events.loc[y_test.index] if not df_events.empty else pd.DataFrame(index=y_test.index)
 
     print(f"\nCategory: {category}")
     print(f"Train points: {len(y_train)}, Test points: {len(y_test)}")
@@ -148,16 +149,11 @@ def run_baselines_for_category(
 
 
     # ------ Baseline 3: Time Regression ------
-    y_train_clean = y_train.dropna()
-    tr_forecast, _ = time_regression(
-        history=y_train_clean, 
-        horizon=horizon, 
-    )
-
+    tr_forecast, _ = time_regression(history=y_train.dropna(), horizon=horizon)
     tr_forecast_aligned = tr_forecast.reindex(y_test.index)
     tr_errors = compute_errors(y_test, tr_forecast_aligned)
-   
 
+   
     # ------ Print Results ------
     """ Overall errors """
     print("\nOverall errors: ")
@@ -202,7 +198,7 @@ def plot_baselines_single_category(
         ra_forecast: pd.Series,
         tr_forecast: pd.Series | None = None,
         event_test: pd.DataFrame | None = None,
-        train_weeks_to_show: int = 26,
+        train_weeks_to_show: int = 52,
 ) -> None:
 
     # focus on last "train_weeks_to_show" weeks of training data
@@ -251,6 +247,7 @@ def plot_baselines_single_category(
         label="Seasonal Naive", 
         linewidth=1.4, 
         linestyle="--")
+    
     plt.plot(
         y_test.index, 
         ra_forecast.values,
@@ -272,6 +269,7 @@ def plot_baselines_single_category(
         any_event = event_test.any(axis=1)
         in_event = False
         start = None
+        prev_idx = None
         for idx, is_event in any_event.items():
             if is_event and not in_event:
                 #start of event
@@ -302,9 +300,9 @@ def plot_baselines_single_category(
     plt.xlim(start, end)
 
     plt.ylim(y_min, y_max)
-    plt.title(f"Baseline forecasts vs actual - {category}")
+    plt.title(f"Baseline forecasts vs actual - {category} (weekly proxy)")
     plt.xlabel("Week")
-    plt.ylabel("Demand")
+    plt.ylabel("Demand (weekly proxy)")
     plt.text(
         y_test.index[2], y_max - 0.5,
         "New Year Window",
@@ -318,7 +316,6 @@ def plot_baselines_single_category(
     plt.savefig(out_path, dpi=300)
     plt.close()
 
-#def run_time_reg_forecast
 
 #Compare three event driven categories on one plot
 def plot_category_comparison(demand_fitness,
@@ -366,13 +363,14 @@ def main() -> None:
             demand_csv_path=demand_csv_path,
         )
         plot_baselines_single_category(
-            category,
+            category=category,
             y_train=results["y_train"],
             y_test=results["y_test"],
             sn_forecast=results["sn_forecast"],
             ra_forecast=results["ra_forecast"],
             tr_forecast=results["tr_forecast"],
             event_test=results["event_test"],
+            train_weeks_to_show=52,
         )
 
     #load full demand data for comparison plot
