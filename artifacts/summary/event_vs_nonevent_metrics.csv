@@ -1,31 +1,73 @@
-category,model,subset,RMSE,sMAPE,MAE,n_points
-electronic,event_ridge,event_weeks,2.4526036508941242,10.460142508738397,1.5697699062949377,1019
-electronic,event_random_forest,event_weeks,2.3630164086390772,10.93529917702348,1.6406286468096847,341
-electronic,rolling_average,event_weeks,2.573121714887473,12.389921676552925,1.8599558390579,1019
-electronic,seasonal_naive,event_weeks,4.010876127005487,16.079458147518896,2.5272571148184495,1019
-electronic,time_regression,event_weeks,4.057093115494905,18.01289929220212,2.811820107824246,1019
-electronic,event_random_forest,non_event_weeks,2.31851110633883,10.563069655239403,1.6149232799836077,231
-electronic,event_ridge,non_event_weeks,2.4372475102178934,11.21235335600701,1.671302806794621,693
-electronic,rolling_average,non_event_weeks,2.440449851583604,12.548936323979772,1.8516762866762866,693
-electronic,seasonal_naive,non_event_weeks,4.249926368091468,17.86513430357607,2.8059812409812412,693
-electronic,time_regression,non_event_weeks,4.243256649711939,19.034997624857198,2.985571567140481,693
-fitness,event_ridge,event_weeks,2.0662502930098228,9.761121651520261,1.3765375270277735,1019
-fitness,event_random_forest,event_weeks,2.0524427875166924,10.381842214901658,1.4292942805182631,341
-fitness,rolling_average,event_weeks,2.1088504434153217,12.024267827516091,1.671393931959437,1019
-fitness,seasonal_naive,event_weeks,2.8225409151792022,12.790234983586913,1.7969136408243378,1019
-fitness,time_regression,event_weeks,2.767927982289562,13.803446793174373,1.9334566588111886,1019
-fitness,event_random_forest,non_event_weeks,1.9630422408097854,9.949056986388891,1.317367039632185,231
-fitness,event_ridge,non_event_weeks,2.2253419648250086,10.11298369566714,1.4533565373833928,693
-fitness,rolling_average,non_event_weeks,2.4431297644590333,12.01741810122999,1.7194498556998559,693
-fitness,seasonal_naive,non_event_weeks,3.1893933671632686,13.072885980330371,1.9666738816738816,693
-fitness,time_regression,non_event_weeks,3.02037122098974,14.51008689390524,2.0911985405113107,693
-school,event_ridge,event_weeks,2.19732009441627,9.226704322965746,1.7583887510409941,1019
-school,seasonal_naive,event_weeks,2.608846019128208,9.620267457877416,1.8284936211972522,1019
-school,event_random_forest,event_weeks,2.373881503199779,9.787203558159952,1.8638557669776479,341
-school,rolling_average,event_weeks,2.3304199779453962,11.45247514759386,2.1757294733398758,1019
-school,time_regression,event_weeks,2.612009705365046,11.70472695025295,2.242283241141091,1019
-school,seasonal_naive,non_event_weeks,2.491445037849195,8.710523008988325,1.6643650793650793,693
-school,event_ridge,non_event_weeks,2.1663866619987027,8.76528515728684,1.680673349256926,693
-school,event_random_forest,non_event_weeks,2.299796862760165,9.805284004110813,1.854380762668284,231
-school,time_regression,non_event_weeks,2.468969355839395,10.928737184251771,2.0789470625836364,693
-school,rolling_average,non_event_weeks,2.3159136667225666,11.17753518596117,2.1502320827320824,693
+category,model,subset,RMSE,sMAPE,MAE,n_points,,
+electronic,event_ridge,event_weeks,2.452603651,10.46014251,1.569769906,1019,,
+electronic,event_random_forest,event_weeks,2.363016409,10.93529918,1.640628647,341,,
+electronic,rolling_average,event_weeks,2.573121715,12.39,1.86,1019,,
+electronic,seasonal_naive,event_weeks,4.010876127,16.08,2.53,1019,,
+electronic,time_regression,event_weeks,4.057093115,18.01,2.81,1019,,
+electronic,event_random_forest,non_event_weeks,2.318511106,10.56306966,1.61492328,231,,
+electronic,event_ridge,non_event_weeks,2.43724751,11.21235336,1.671302807,693,,
+electronic,rolling_average,non_event_weeks,2.440449852,12.55,1.85,693,,
+electronic,seasonal_naive,non_event_weeks,4.249926368,17.87,2.81,693,,
+electronic,time_regression,non_event_weeks,4.24325665,19.03,2.99,693,,
+fitness,event_ridge,event_weeks,2.066250293,9.761121652,1.376537527,1019,,
+fitness,event_random_forest,event_weeks,2.052442788,10.38184221,1.429294281,341,,
+fitness,rolling_average,event_weeks,2.108850443,12.02,1.67,1019,,
+fitness,seasonal_naive,event_weeks,2.822540915,12.79,1.80,1019,,
+fitness,time_regression,event_weeks,2.767927982,13.80,1.93,1019,,
+fitness,event_random_forest,non_event_weeks,1.963042241,9.949056986,1.31736704,231,,
+fitness,event_ridge,non_event_weeks,2.225341965,10.1129837,1.453356537,693,,
+fitness,rolling_average,non_event_weeks,2.443129764,12.02,1.72,693,,
+fitness,seasonal_naive,non_event_weeks,3.189393367,13.07,1.97,693,,
+fitness,time_regression,non_event_weeks,3.020371221,14.51,2.09,693,,
+school,event_ridge,event_weeks,2.197320094,9.226704323,1.758388751,1019,,
+school,seasonal_naive,event_weeks,2.608846019,9.62,1.83,1019,,
+school,event_random_forest,event_weeks,2.373881503,9.787203558,1.863855767,341,,
+school,rolling_average,event_weeks,2.330419978,11.45,2.18,1019,,
+school,time_regression,event_weeks,2.612009705,11.70,2.24,1019,,
+school,seasonal_naive,non_event_weeks,2.491445038,8.71,1.66,693,,
+school,event_ridge,non_event_weeks,2.166386662,8.765285157,1.680673349,693,,
+school,event_random_forest,non_event_weeks,2.299796863,9.805284004,1.854380763,231,,
+school,time_regression,non_event_weeks,2.468969356,10.93,2.08,693,,
+school,rolling_average,non_event_weeks,2.315913667,11.18,2.15,693,,
+,,,,,,,,
+,,,,,,,,
+category,model,subset,sMAPE,smape2,,,,nonevent smape
+electronic,rolling_average,event_weeks,12.39,12.39,,,,
+electronic,seasonal_naive,event_weeks,16.08,16.08,,,,
+electronic,time_regression,event_weeks,18.01,18.01,,,,
+electronic,rolling_average,non_event_weeks,12.55,12.55,,,,12.55
+electronic,seasonal_naive,non_event_weeks,17.87,17.87,,,,17.87
+electronic,time_regression,non_event_weeks,19.03,19.03,,,,19.03
+fitness,rolling_average,event_weeks,12.02,12.02,,,,
+fitness,seasonal_naive,event_weeks,12.79,12.79,,,,
+fitness,time_regression,event_weeks,13.80,13.80,,,,
+fitness,rolling_average,non_event_weeks,12.02,12.02,,,,12.02
+fitness,seasonal_naive,non_event_weeks,13.07,13.07,,,,13.07
+fitness,time_regression,non_event_weeks,14.51,14.51,,,,14.51
+school,seasonal_naive,event_weeks,9.62,9.62,,,,
+school,rolling_average,event_weeks,11.45,11.45,,,,
+school,time_regression,event_weeks,11.70,11.70,,,,
+school,seasonal_naive,non_event_weeks,8.71,8.71,,,,8.71
+school,time_regression,non_event_weeks,10.93,10.93,,,,10.93
+school,rolling_average,non_event_weeks,11.18,11.18,,,,11.18
+,,,,,,,,
+,,nonevent smape,,event smape,,,%change,
+Electronic Accessories,Rolling Average,12.55,,12.39,,,-1.27,
+,Seasonal Na•ve ,17.87,,16.08,,,-10.00,
+,Time Regression,19.03,,18.01,,,-5.37,
+Fitness Equipment,Rolling Average,12.02,,12.02,,,0.06,
+,Seasonal Na•ve ,13.07,,12.79,,,-2.16,
+,Time Regression,14.51,,13.80,,,-4.87,
+School Supplies,Rolling Average,8.71,,9.62,,,10.44,
+,Seasonal Na•ve ,10.93,,11.45,,,4.79,
+,Time Regression,11.18,,11.70,,,4.72,
+,,,,,,,,
+,,,,,,,,
+,,,,,,,,
+,,,,,,,,
+,,,,,,,,
+,,,,,,,,
+,,,,,,,,
+,,,,,,,,
+,,,,,,,,
+,,,,,,,,
