@@ -289,26 +289,29 @@ def fig_event_window_trace(category: str, event_col: str, models: list[str]) -> 
 
 
 
-
-
-
 def main() -> None:
     _ensure_dirs()
 
     overall = _load_summary("overall_metrics.csv")
     ev = _load_summary("event_vs_nonevent_metrics.csv")
-
-    fig_overall_mae_bar(overall)
-    fig_event_vs_nonevent_mae(ev)
-
     stability = _load_summary("stability_metrics.csv")
-    fig_origin_stability(stability)
 
-    fig_event_window_trace(
+    fig_overall_mae_bar(overall) #figs 3a-3c
+    fig_event_vs_nonevent_mae(ev) #figs 1a-1c
+    fig_origin_stability(stability) #figs 4a-4c
+
+    try:
+        fig_event_window_trace(
         category="electronic_goods",
         event_col="is_q4_holiday_electronics",
         models=["rolling_average", "event_ridge", "event_random_forest"],
     )
+    except FileNotFoundError as e:
+        print(f"[WARN] Skipped event window trace (missing detailed file): {e}")
+    except KeyError as e:
+        print(f"[WARN] Skipped event window trace (missing event column): {e}")
+
+    print(f"[OK] Figures saved to {FIG_DIR.resolve()}")
 
 
 if __name__ == "__main__":
