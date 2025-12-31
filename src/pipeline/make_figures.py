@@ -402,7 +402,7 @@ def make_electronics_volatility_figure(
         category: str = "electronic_goods",
         test_weeks: int = 52,
         rolling_window: int = 12,
-        train_weeks_to_show: int = 52,
+        train_weeks_to_show: int = 26,
     ) -> None:
     FIG_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -509,7 +509,9 @@ def make_electronics_volatility_figure(
             label="Q4 holiday window",
         )
 
-    ax.set_title("Holdout test window forecasts — Electronic Accessories (Q4 highlighted)")
+    ax.axvline(y_test.index.min(), linestyle="--", alpha=0.6, color="grey", linewidth=0.8)
+    ax.text(y_test.index.min(), ax.get_ylim()[1], " Test start", va="top", ha="left", fontsize=8, color="grey")
+    ax.set_title("Holdout forecasts (52-week horizon) — Electronic Accessories (Q4 highlighted)")
     ax.set_xlabel("Week")
     ax.set_ylabel("Demand (weekly)")
     ax.legend(fontsize=8, loc="upper left")
