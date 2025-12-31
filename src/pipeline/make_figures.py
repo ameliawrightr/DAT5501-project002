@@ -6,13 +6,19 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
+from typing import Dict
 import glob
 
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
+from src.ingestion.demand import load_weekly_demand
+from src.models.baseline import rolling_average
+from src.models.forecasting_utils import align_predictions
+from src.models.event_models import EventModelConfig, fit_and_forecast_event_model
 
 BACKTEST_DIR = Path("artifacts/backtests")
 SUMMARY_DIR = Path("artifacts/summary")
@@ -56,7 +62,6 @@ def _load_summary(name: str) -> pd.DataFrame:
         raise FileNotFoundError(f"Missing {path}. Run summarise_backtests first.")
     return pd.read_csv(path)
 
-
 def _load_detailed_for(category: str, model: str) -> pd.DataFrame:
     path = BACKTEST_DIR / f"{category}_{model}_detailed.csv"
     if not path.exists():
@@ -65,7 +70,6 @@ def _load_detailed_for(category: str, model: str) -> pd.DataFrame:
     df["origin_time"] = pd.to_datetime(df["origin_time"])
     df["forecast_time"] = pd.to_datetime(df["forecast_time"])
     return df
-
 
 def _event_cols(df: pd.DataFrame) -> list[str]:
     return [c for c in df.columns if c.startswith("is_")]
@@ -88,7 +92,8 @@ def fig_overall_mae_bar(overall: pd.DataFrame) -> None:
             continue 
 
         #consistent order (by performance) 
-        g = g.sort_values(metric, ascending=True)
+        g = g.set_index("model").reindex(MODEL_ORDER).reset_index()
+        g = g.dropna(subset=[metric])
         g["model_label"] = g["model"].map(MODEL_LABELS).fillna(g["model"])
 
         x = np.arange(len(g), dtype=float)
@@ -251,37 +256,106 @@ def fig_origin_stability(stab: pd.DataFrame) -> None:
         plt.close()
 
 #4. dedicated event window trace figure
-#plots actual + rolling average + event ridge + erf over most ative event window in electronics (Q4 or exam)
-def fig_event_window_trace(category: str, event_col: str, models: list[str]) -> None:
-    series = {}
+"""Plot a realistic forecast trace around a specific event window:
+    - Uses ONE prediction per forecast_time: from the latest origin_time < forecast_time
+      (avoids averaging across origins / leaking future information)
+    - Focuses on the most recent event window, with padding.
+    - Shades event periods rather than drawing a line per week.
+    """
+def fig_event_window_trace(
+        category: str, 
+        event_col: str, 
+        models: list[str],
+        pad_weeks: int = 12,
+    ) -> None:
+    series: dict[str, pd.DataFrame] = {}
+    base: pd.DataFrame | None = None
+
     for m in models:
-        df = _load_detailed_for(category, m)
+        df = _load_detailed_for(category, m).sort_values(["forecast_time", "origin_time"])
+
+        if event_col not in df.columns:
+            raise KeyError(f"{event_col} not found in {category}_{m}_detailed.csv")
+        
         df[event_col] = df[event_col].astype(bool)
 
+        #pick "as-of" prediction for each forecast_time, take latest origin_time < forecast_time
+        df = df[df["origin_time"] < df["forecast_time"]].copy()
+        if df.empty:
+            continue
+
+        df = df.sort_values(["forecast_time", "origin_time"])
+        asof = df.groupby("forecast_time").tail(1) #latest origin per forecast time
+    
         #agg per forecast_time: mean y_true, mean y_pred, max event flag
         agg = (
-            df.groupby("forecast_time")[["y_true", "y_pred", event_col]]
-            .agg({"y_true": "mean", "y_pred": "mean", event_col: "max"})
-            .reset_index()
+            asof[["forecast_time", "y_true", "y_pred", event_col]]
+            .rename(columns={"y_pred": f"y_pred_{m}"})
             .sort_values("forecast_time")
         )
         series[m] = agg
 
-    #use y_true from first model (should be same across all)
-    any_m = models[0]
-    base = series[any_m]
+        if base is None:
+            base = agg[["forecast_time", "y_true", event_col]].copy()
+    
+    if base is None or base.empty:
+        return
+    
+    #identify most recent event window and zoom in + pad
+    ev_times = base.loc[base[event_col], "forecast_time"].sort_values()
+    if ev_times.empty:
+        raise ValueError(f"No events found in {category} for column {event_col}")
+    
+    #use most recent event year/season
+    last_ev = ev_times.max()
+    season_year = pd.Timestamp(last_ev).year
+  
+    #keep only event weeks from most recent year
+    ev_recent = ev_times[(ev_times.dt.year == season_year) | (ev_times.dt.year == season_year + 1)]
+    if ev_recent.empty:
+        ev_recent = ev_times #fallback
+
+    first_ev = ev_recent.min()
+    last_ev = ev_recent.max()
+
+    start = first_ev - pd.Timedelta(weeks=pad_weeks)
+    end = last_ev + pd.Timedelta(weeks=pad_weeks)
+
+    base_win = base[(base["forecast_time"] >= start) & (base["forecast_time"] <= end)].copy()
+    if base_win.empty:
+        return
+
     plt.figure(figsize=(10, 5.0))
-    plt.plot(base["forecast_time"], base["y_true"], label="Actual")
+    plt.plot(base_win["forecast_time"], base_win["y_true"], label="Actual")
     
     for m in models:
-        plt.plot(series[m]["forecast_time"], series[m]["y_pred"], label=MODEL_LABELS.get(m, m))
+        if m not in series:
+            continue
+        s = series[m]
+        s_win = s[(s["forecast_time"] >= start) & (s["forecast_time"] <= end)].copy()
+        
+        if m == "event_random_forest":
+            #emphasize event-aware model
+            plt.plot(
+                s_win["forecast_time"], 
+                s_win[f"y_pred_{m}"], 
+                label=MODEL_LABELS.get(m, m),
+                linewidth=2.0,
+                marker="o",
+            )
+        else:
+            plt.plot(
+                s_win["forecast_time"], 
+                s_win[f"y_pred_{m}"], 
+                label=MODEL_LABELS.get(m, m),
+                linewidth=2,
+            )
 
-    #shade event weeks
-    ev = base[base[event_col]]
-    if not ev.empty:
-        for t in ev["forecast_time"]:
-            plt.axvline(t, linestyle="--", linewidth=0.7)
-            
+    #shade full Q4 window
+    plt.axvspan(first_ev, last_ev, alpha=0.15, label="Q4 holiday window")
+    plt.axvline(first_ev, linestyle="--", linewidth=0.7)
+    plt.axvline(last_ev, linestyle="--", linewidth=0.7)
+
     plt.title(f"Forecast vs actual during {event_col} — {_pretty_cat(category)}")
     plt.ylabel("Demand")
     plt.legend(fontsize=8)
@@ -290,7 +364,163 @@ def fig_event_window_trace(category: str, event_col: str, models: list[str]) -> 
     plt.savefig(out, dpi=300)
     plt.close()
 
+#Make figure to support	Visual Evaluation in High-Volatility Periods
+def _shade_event_spans(ax, idx: pd.DatetimeIndex, mask: pd.Series, label:str) -> None:
+    #shade spans where mask is True
+    mask = mask.reindex(idx).fillna(False).astype(bool)
+    
+    in_span = False
+    span_start = None
+    prev = None
+    first_label_used = False
 
+    for t, is_ev in mask.items():
+        if is_ev and not in_span:
+            in_span = True
+            span_start = t
+        if (not is_ev) and in_span:
+            ax.axvspan(
+                span_start,
+                prev,
+                alpha=0.15,
+                label=(label if not first_label_used else None),
+            )
+            first_label_used = True
+            in_span = False
+        prev = t
+
+    if in_span and span_start is not None and prev is not None:
+        ax.axvspan(
+            span_start,
+            prev,
+            alpha=0.15,
+            label=(label if not first_label_used else None),
+        )
+
+def make_electronics_volatility_figure(
+        demand_csv_path: str = "data/processed/demand_monthly.csv",
+        category: str = "electronic_goods",
+        test_weeks: int = 52,
+        rolling_window: int = 12,
+        train_weeks_to_show: int = 52,
+    ) -> None:
+    FIG_DIR.mkdir(parents=True, exist_ok=True)
+
+    df = load_weekly_demand(demand_csv_path)
+    df_cat = df[df["category"] == category].copy()
+    if df_cat.empty:
+        raise ValueError(f"No demand data found for category {category}")
+    
+    df_cat = df_cat.sort_values("week_start").set_index("week_start")
+
+    y = df_cat["demand"].astype(float).sort_index()
+
+    event_cols = [c for c in df_cat.columns if c.startswith("is_")]
+    if not event_cols:
+        raise ValueError(f"No event columns found for category {category}")
+    events = df_cat[event_cols].asfreq("W-MON").fillna(False).astype(bool)
+
+    y_train = y.iloc[:-test_weeks]
+    y_test = y.iloc[-test_weeks:]
+    events_train = events.loc[y_train.index]
+    events_test = events.loc[y_test.index]
+
+    #baseline: RA on holdout window
+    ra_raw = rolling_average(y_train, window=rolling_window, horizon=len(y_test))
+    ra_forecast = align_predictions(ra_raw, index=y_test.index)
+
+    # --- Event models: same configs as run_event_models ---
+    model_configs: Dict[str, EventModelConfig] = {
+        "Event Ridge": EventModelConfig(
+            model_type="ridge",
+            lags=(1, 52),
+            include_trend=True,
+            include_weekofyear=True,
+            alpha=1.0,
+        ),
+        "Random Forest (event-aware)": EventModelConfig(
+            model_type="random_forest",
+            lags=(1, 52),
+            include_trend=True,
+            include_weekofyear=True,
+            rf_n_estimators=300,
+            rf_max_depth=None,
+        ),
+    }
+
+    event_forecasts: Dict[str, pd.Series] = {}
+    for name, config in model_configs.items():
+        y_pred, _ = fit_and_forecast_event_model(
+            y_train=y_train,
+            y_test=y_test,
+            events_train=events_train,
+            events_test=events_test,
+            config=config,
+        )
+        event_forecasts[name] = y_pred.reindex(y_test.index)
+
+    # --- Plot: last N train weeks + test window with all forecasts ---
+    train_tail = y_train.iloc[-train_weeks_to_show:]
+
+    fig, ax = plt.subplots(figsize=(11, 5.2))
+
+    # Train context
+    ax.plot(
+        train_tail.index,
+        train_tail.values,
+        label=f"Train (last {train_weeks_to_show} weeks)",
+        color="0.8",
+        linewidth=1.2,
+    )
+
+    # Actual test
+    ax.plot(
+        y_test.index,
+        y_test.values,
+        label="Test / Actual",
+        color="black",
+        linewidth=2.0,
+    )
+
+    # Rolling Average baseline
+    ax.plot(
+        y_test.index,
+        ra_forecast.values,
+        label="Rolling Average (baseline)",
+        linewidth=1.6,
+        linestyle="--",
+    )
+
+    # Event-aware models
+    for name, pred in event_forecasts.items():
+        ax.plot(
+            pred.index,
+            pred.values,
+            label=name,
+            linewidth=1.6,
+        )
+
+    # Shade Q4 holiday window for electronics
+    if "is_q4_holiday_electronics" in events_test.columns:
+        _shade_event_spans(
+            ax=ax,
+            idx=y_test.index,
+            mask=events_test["is_q4_holiday_electronics"],
+            label="Q4 holiday window",
+        )
+
+    ax.set_title("Holdout test window forecasts — Electronic Accessories (Q4 highlighted)")
+    ax.set_xlabel("Week")
+    ax.set_ylabel("Demand (weekly)")
+    ax.legend(fontsize=8, loc="upper left")
+    ax.set_xlim(train_tail.index.min(), y_test.index.max())
+    fig.tight_layout()
+
+    out_path = FIG_DIR / "figure2_electronic_holdout_q4.png"
+    fig.savefig(out_path, dpi=300)
+    plt.close(fig)
+
+    print(f"[OK] Wrote {out_path}")
 
 def main() -> None:
     _ensure_dirs()
@@ -302,7 +532,9 @@ def main() -> None:
     fig_overall_mae_bar(overall) #figs 3a-3c
     fig_event_vs_nonevent_mae(ev) #figs 1a-1c
     fig_origin_stability(stability) #figs 4a-4c
+    make_electronics_volatility_figure() #figure 2
 
+"""
     try:
         fig_event_window_trace(
         category="electronic_goods",
@@ -315,7 +547,7 @@ def main() -> None:
         print(f"[WARN] Skipped event window trace (missing event column): {e}")
 
     print(f"[OK] Figures saved to {FIG_DIR.resolve()}")
-
+"""
 
 if __name__ == "__main__":
     main()
