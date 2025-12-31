@@ -79,43 +79,35 @@ def fig_overall_mae_bar(overall: pd.DataFrame) -> None:
     metric = "sMAPE"
     pretty_metric = "Mean sMAPE (%)"
 
-    key_models = [
-        "seasonal_naive",
-        "rolling_average",
-        "event_ridge",
-        "event_random_forest",
-    ]
+    #plot all core models (baseline + event-aware)
+    key_models = MODEL_ORDER
 
-    label_map = {
-            "seasonal_naive": "Seasonal Naive",
-            "rolling_average": "Rolling Average",
-            "event_ridge": "Event Ridge",
-            "event_random_forest": "Random Forest \n(event-aware)",
-        }
-    
     for cat, g in overall.groupby("category"):
         g = g[g["model"].isin(key_models)].copy()
         if g.empty:
             continue 
 
-        g["model_label"] = g["model"].map(label_map).fillna(g["model"])
+        #consistent order (by performance) 
         g = g.sort_values(metric, ascending=True)
+        g["model_label"] = g["model"].map(MODEL_LABELS).fillna(g["model"])
 
         x = np.arange(len(g), dtype=float)
-        values = g[metric].values
+        values = g[metric].astype(float).values
         
-        plt.figure(figsize=(8, 4.5))
+        plt.figure(figsize=(10, 5.0))
         plt.bar(x, values)
         plt.ylabel(pretty_metric)
-        plt.title(f"Overall {pretty_metric} by model — {cat}")
+        plt.title(f"Overall {pretty_metric} by model — {_pretty_cat(cat)}")
         plt.xticks(x, g["model_label"], ha="center")
         
         #extend y-axis dynamically to fit labels
-        y_max = (values.max())
+        y_max = float(np.nanmax(values)) if len(values) else 1.0
         plt.ylim(0, y_max * 1.25)
 
         #add value labels on top of bars
         for i, v in enumerate(values):
+            if np.isnan(v):
+                continue
             plt.text(
                 x[i],
                 v + 0.03 * y_max,
@@ -207,51 +199,40 @@ def fig_event_vs_nonevent_mae(ev: pd.DataFrame) -> None:
         plt.close()
 
 #3. Stability plot
+#origin level MAE mean +- std (lower is better)
 def fig_origin_stability(stab: pd.DataFrame) -> None:
-    #stability mfigure using summary per origin statistics
-    # show mean MAE per origin with errors bars (std) for key models
     metric = "origin_MAE_mean"
     err_metric = "origin_MAE_std"
-    pretty_metric = "Mean MAE per origin"
+    pretty_metric = "Origin-level MAE (mean ± std)"
 
-    key_models = [
-        "seasonal_naive",
-        "rolling_average",
-        "event_ridge",
-        "event_random_forest",
-    ]
-
-    label_map = {
-        "seasonal_naive": "Seasonal Naive",
-        "rolling_average": "Rolling Average",
-        "event_ridge": "Event Ridge",
-        "event_random_forest": "Random Forest \n(event-aware)",
-    }
+    key_models = MODEL_ORDER
 
     for cat, g in stab.groupby("category"):
         g = g[g["model"].isin(key_models)].copy()
         if g.empty:
             continue 
 
-        g["model_label"] = g["model"].map(label_map).fillna(g["model"])
         g = g.sort_values(metric, ascending=True)
+        g["model_label"] = g["model"].map(MODEL_LABELS).fillna(g["model"])
 
         x = np.arange(len(g), dtype=float)
-        values = g[metric].values
-        errors = g[err_metric].values
+        values = g[metric].astype(float).values
+        errors = g[err_metric].astype(float).values
 
-        plt.figure(figsize=(8, 4.5))
+        plt.figure(figsize=(10, 5.0))
         plt.bar(x, values, yerr=errors, capsize=3)
         plt.ylabel(pretty_metric)
-        plt.title(f"Forecast stability across origins — {cat}")
+        plt.title(f"Forecast stability across origins — {_pretty_cat(cat)}")
         plt.xticks(x, g["model_label"], ha="center")
 
         # Extend y-axis dynamically to fit labels + error bars
-        y_max = (values + errors).max()
+        y_max = float(np.nanmax(values + errors)) if len(values) else 1.0
         plt.ylim(0, y_max * 1.15)
 
         #label bars with mean MAE values
         for i, v in enumerate(values):
+            if np.isnan(v):
+                continue
             plt.text(
                 x[i],
                 v + errors[i] + 0.02 * y_max,
@@ -266,78 +247,49 @@ def fig_origin_stability(stab: pd.DataFrame) -> None:
         plt.savefig(out, dpi=300)
         plt.close()
 
+#4. dedicated event window trace figure
+#plots actual + rolling average + event ridge + erf over most ative event window in electronics (Q4 or exam)
+def fig_event_window_trace(category: str, event_col: str, models: list[str]) -> None:
+    series = {}
+    for m in models:
+        df = _load_detailed_for(category, m)
+        df[event_col] = df[event_col].astype(bool)
 
-#OPTIONAL / EXTRA FIGURES
-#4. One “forecast vs actual” plot during an event window for each category
-def fig_example_forecast_paths(category: str, model: str, n_origins: int = 6) -> None:
-    #show multiple forecast paths (y_pred) vs actuals for a small number of origins.
-    #this produces a clean visual of backtest behaviour without needing a separate 'actual series' file.
+        #agg per forecast_time: mean y_true, mean y_pred, max event flag
+        agg = (
+            df.groupby("forecast_time")[["y_true", "y_pred", event_col]]
+            .agg({"y_true": "mean", "y_pred": "mean", event_col: "max"})
+            .reset_index()
+            .sort_values("forecast_time")
+        )
+        series[m] = agg
 
-    df = _load_detailed_for(category, model)
-    df = df.sort_values(["origin_time", "forecast_time"])
+    #use y_true from first model (should be same across all)
+    any_m = models[0]
+    base = series[any_m]
+    plt.figure(figsize=(10, 5.0))
+    plt.plot(base["forecast_time"], base["y_true"], label="Actual")
+    
+    for m in models:
+        plt.plot(series[m]["forecast_time"], series[m]["y_pred"], label=MODEL_LABELS.get(m, m))
 
-    #take last N origins for a modern-looking plot
-    origins = sorted(df["origin_time"].unique())[-n_origins:]
-    df = df[df["origin_time"].isin(origins)]
-
-    #build an "actuals" line for the forecast_time points in this slice
-    actual = (
-        df.groupby("forecast_time")["y_true"]
-        .mean()  
-        .sort_index()
-    )
-
-    plt.figure(figsize=(10, 5.2))
-    plt.plot(actual.index, actual.values, label="Actual")
-
-    for origin in origins:
-        g = df[df["origin_time"] == origin].sort_values("forecast_time")
-        plt.plot(g["forecast_time"], g["y_pred"].astype(float).values, label=f"Origin {origin.date()}")
-
-    plt.title(f"Forecast paths vs actual — {category} ({model})")
-    plt.ylabel("Demand")
-    plt.legend(fontsize=8, ncol=2)
-    plt.tight_layout()
-    out = FIG_DIR / f"{category}_{model}_forecast_paths.png"
-    plt.savefig(out, dpi=300)
-    plt.close()
-
-#4b. One “forecast vs actual” plot during an event window for each category
-def fig_event_window_example(category: str, model: str) -> None:
-    #Plot forecast errors around an event flag for interpretability.
-    #Picks the first is_* column found and plots abs_error over time with event markers.
-    df = _load_detailed_for(category, model)
-    evcols = _event_cols(df)
-    if not evcols:
-        return
-
-    #choose the most "active" event column in this detailed file
-    counts = {c: int(df[c].astype(bool).sum()) for c in evcols}
-    event_col = sorted(counts.items(), key=lambda x: x[1], reverse=True)[0][0]
-
-    #aggregate abs_error by forecast_time and whether that week is an event
-    df[event_col] = df[event_col].astype(bool)
-    agg = (
-        df.groupby("forecast_time")[["abs_error", event_col]]
-        .agg({"abs_error": "mean", event_col: "max"})
-        .reset_index()
-        .sort_values("forecast_time")
-    )
-
-    plt.figure(figsize=(10, 4.8))
-    plt.plot(agg["forecast_time"], agg["abs_error"], label="Mean abs error")
-    #overlay event points
-    ev = agg[agg[event_col]]
+    #shade event weeks
+    ev = base[base[event_col]]
     if not ev.empty:
-        plt.scatter(ev["forecast_time"], ev["abs_error"], label=f"Event weeks ({event_col})", marker="o")
-
-    plt.title(f"Error over time with event weeks highlighted — {category} ({model})")
-    plt.ylabel("Mean abs error")
-    plt.legend()
+        for t in ev["forecast_time"]:
+            plt.axvline(t, linestyle="--", linewidth=0.7)
+            
+    plt.title(f"Forecast vs actual during {event_col} — {_pretty_cat(category)}")
+    plt.ylabel("Demand")
+    plt.legend(fontsize=8)
     plt.tight_layout()
-    out = FIG_DIR / f"{category}_{model}_error_with_events.png"
+    out = FIG_DIR / f"{category}_{event_col}_forecast_trace.png"
     plt.savefig(out, dpi=300)
     plt.close()
+
+
+
+
 
 
 def main() -> None:
@@ -352,21 +304,11 @@ def main() -> None:
     stability = _load_summary("stability_metrics.csv")
     fig_origin_stability(stability)
 
-    #example forecast paths and event window plots
-    examples = [
-        ("fitness_equipment", "event_ridge"),
-        ("electronic_goods", "event_ridge"),
-        ("school_supplies", "event_ridge"),
-    ]
-    for cat, model in examples:
-        try:
-            fig_example_forecast_paths(cat, model, n_origins=6)
-            fig_event_window_example(cat, model)
-        except FileNotFoundError:
-            # skip if filenames differ
-            continue
-
-    print(f"[OK] Figures saved to {FIG_DIR.resolve()}")
+    fig_event_window_trace(
+        category="electronic_goods",
+        event_col="is_q4_holiday_electronics",
+        models=["rolling_average", "event_ridge", "event_random_forest"],
+    )
 
 
 if __name__ == "__main__":
