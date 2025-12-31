@@ -162,9 +162,12 @@ def fig_event_vs_nonevent_mae(ev: pd.DataFrame) -> None:
         plt.legend()
 
         # dynamic y-lim
-        all_vals = [v for v in np.concatenate([vals_event + vals_nonevent]) if not np.isnan(v)]
-        y_max = max(all_vals) if all_vals else 1.0
-        plt.ylim(0, y_max * 1.25)
+        all_vals = np.r_[vals_event, vals_nonevent]
+        all_vals = all_vals[~np.isnan(all_vals)]
+        
+        y_max = float(all_vals.max()) if all_vals.size else 1.0
+        top = y_max * 1.25
+        plt.ylim(0, top)
 
         #add value labels on top of bars
         for i, v in enumerate(vals_event):
