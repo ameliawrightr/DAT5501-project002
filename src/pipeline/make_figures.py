@@ -18,10 +18,37 @@ BACKTEST_DIR = Path("artifacts/backtests")
 SUMMARY_DIR = Path("artifacts/summary")
 FIG_DIR = Path("artifacts/figures")
 
+MODEL_ORDER = [
+    "seasonal_naive",
+    "rolling_average",
+    "time_regression",
+    "event_ridge",
+    "event_random_forest",
+]
+
+MODEL_LABELS = {
+    "seasonal_naive": "Seasonal Naive",
+    "rolling_average": "Rolling Average",
+    "time_regression": "Time Regression",
+    "event_ridge": "Event Ridge",
+    "event_random_forest": "Random Forest \n(event-aware)",
+}
+
+CATEGORY_LABELS = {
+    "fitness_equipment": "Fitness Equipment",
+    "fitness": "Fitness Equipment",
+    "electronic_goods": "Electronic Accessories",
+    "electronics": "Electronic Accessories",
+    "electronic": "Electronic Accessories",
+    "school_supplies": "School Supplies",
+    "school": "School Supplies",
+}
+
+def _pretty_cat(cat: str) -> str:
+    return CATEGORY_LABELS.get(cat, CATEGORY_LABELS.get(cat, cat))
 
 def _ensure_dirs() -> None:
     FIG_DIR.mkdir(parents=True, exist_ok=True)
-
 
 def _load_summary(name: str) -> pd.DataFrame:
     path = SUMMARY_DIR / name
@@ -42,6 +69,7 @@ def _load_detailed_for(category: str, model: str) -> pd.DataFrame:
 
 def _event_cols(df: pd.DataFrame) -> list[str]:
     return [c for c in df.columns if c.startswith("is_")]
+
 
 #1. Bar chart: mean MAE by model for each category
 def fig_overall_mae_bar(overall: pd.DataFrame) -> None:
@@ -99,7 +127,7 @@ def fig_overall_mae_bar(overall: pd.DataFrame) -> None:
 
         plt.tight_layout()
         out = FIG_DIR / f"{cat}_overall_sMAPE_by_model.png"
-        plt.savefig(out, dpi=200)
+        plt.savefig(out, dpi=300)
         plt.close()
 
 #2. Event vs non-event (baseline vs event_ridge)
@@ -109,73 +137,73 @@ def fig_event_vs_nonevent_mae(ev: pd.DataFrame) -> None:
     metric = "sMAPE"
     pretty_metric = "Mean sMAPE (%)"
 
-    models_of_interest = ["event_ridge", "event_random_forest"]
-    subset_order = ["event_weeks", "non_event_weeks"]
-
+    #plot only relevant models in consisent order
+    ev = ev[ev["model"].isin(MODEL_ORDER)].copy()
+    if ev.empty:
+        return
+    
     for cat, gcat in ev.groupby("category"):
-        gcat = gcat[gcat["model"].isin(models_of_interest)].copy()
-        if gcat.empty:
+        #pivot to: rows=models, cols=subset (event_weeks/non_event_weeks)
+        wide = (
+            gcat.pivot(index="model", columns="subset", values=metric)
+            .reindex(MODEL_ORDER)
+        )
+
+        #some combos may be missing; drop models without both values
+        wide = wide.dropna(how="all")
+        if wide.empty:
             continue
 
-        #build arrays: [baseline, RF] x [event, non-event]
-        models_labels = ["Event Ridge", "Event Random Forest"]
-        x = np.arange(len(models_of_interest), dtype=float)
+        x = np.arange(len(wide.index), dtype=float)
         width = 0.35
 
-        vals_event: list[float] = []
-        vals_nonevent: list[float] = []
+        vals_event = wide.get("event_weeks", pd.Series(index=wide.index, dtype=float)).values
+        vals_nonevent = wide.get("non_event_weeks", pd.Series(index=wide.index, dtype=float)).values
 
-        for m in models_of_interest:
-            gm = gcat[gcat["model"] == m]
-            me = gm.loc[gm["subset"] == "event_weeks", metric].values
-            mn = gm.loc[gm["subset"] == "non_event_weeks", metric].values
-            vals_event.append(float(me[0]) if len(me) else np.nan)
-            vals_nonevent.append(float(mn[0]) if len(mn) else np.nan)
-
-        
-        plt.figure(figsize=(8, 4.5))
+        plt.figure(figsize=(12, 5.0))
         plt.bar(x - width / 2, vals_event, width, label="Event weeks")
         plt.bar(x + width / 2, vals_nonevent, width, label="Non-event weeks")
         
         plt.ylabel(pretty_metric)
-        plt.title(f"{pretty_metric}: event vs non-event — {cat}")
-        plt.xticks(x, models_labels, ha="center")
+        plt.title(f"{pretty_metric}: event vs non-event — {_pretty_cat(cat)}")
+        plt.xticks(x, [MODEL_LABELS.get(m, m) for m in wide.index], ha="center")
         plt.legend()
 
-        # Extend y-axis dynamically to fit labels + error bars
-        all_vals = [v for v in (vals_event + vals_nonevent) if not np.isnan(v)]
-        if all_vals:
-            y_max = max(all_vals)
-            plt.ylim(0, y_max * 1.25)
+        # dynamic y-lim
+        all_vals = [v for v in np.concatenate([vals_event + vals_nonevent]) if not np.isnan(v)]
+        y_max = max(all_vals) if all_vals else 1.0
+        plt.ylim(0, y_max * 1.25)
 
         #add value labels on top of bars
         for i, v in enumerate(vals_event):
             if np.isnan(v):
                 continue
             plt.text(
-                x[i] - width / 2, 
-                v + 0.02 * y_max, 
-                f"{v:.1f}", 
-                ha="center", 
-                va="bottom", 
-                fontsize=8
+                x[i] - width / 2, v + 0.02 * y_max, f"{v:.1f}", ha="center", va="bottom", fontsize=8
             )
 
         for i, v in enumerate(vals_nonevent):
             if np.isnan(v):
                 continue
             plt.text(
-                x[i] + width / 2, 
-                v + 0.02 * y_max, 
-                f"{v:.1f}", 
-                ha="center", 
-                va="bottom", 
-                fontsize=8
+                x[i] + width / 2, v + 0.02 * y_max, f"{v:.1f}", ha="center", va="bottom", fontsize=8
+            )
+
+        #annotate delta % above pair
+        for i, (ve, vn) in enumerate(zip(vals_event, vals_nonevent)):
+            if np.isnan(ve) or np.isnan(vn) or vn == 0:
+                continue
+            delta = (ve - vn) / vn * 100.0
+            plt.text(
+                x[i], max(ve, vn) + 0.06 * y_max, f"Δ {delta:.0f}%", 
+                ha="center", va="bottom",
+                fontsize=8, fontweight="bold",
+                color="red" if delta > 0 else "green"
             )
 
         plt.tight_layout()
         out = FIG_DIR / f"{cat}_event_vs_nonevent_sMAPE.png"
-        plt.savefig(out, dpi=200)
+        plt.savefig(out, dpi=300)
         plt.close()
 
 #3. Stability plot
@@ -235,7 +263,7 @@ def fig_origin_stability(stab: pd.DataFrame) -> None:
 
         plt.tight_layout()
         out = FIG_DIR / f"{cat}_origin_stability_mae.png"
-        plt.savefig(out, dpi=200)
+        plt.savefig(out, dpi=300)
         plt.close()
 
 
@@ -271,7 +299,7 @@ def fig_example_forecast_paths(category: str, model: str, n_origins: int = 6) ->
     plt.legend(fontsize=8, ncol=2)
     plt.tight_layout()
     out = FIG_DIR / f"{category}_{model}_forecast_paths.png"
-    plt.savefig(out, dpi=200)
+    plt.savefig(out, dpi=300)
     plt.close()
 
 #4b. One “forecast vs actual” plot during an event window for each category
@@ -308,7 +336,7 @@ def fig_event_window_example(category: str, model: str) -> None:
     plt.legend()
     plt.tight_layout()
     out = FIG_DIR / f"{category}_{model}_error_with_events.png"
-    plt.savefig(out, dpi=200)
+    plt.savefig(out, dpi=300)
     plt.close()
 
 
