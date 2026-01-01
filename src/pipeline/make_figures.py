@@ -157,7 +157,7 @@ def fig_event_vs_nonevent_mae(ev: pd.DataFrame) -> None:
         vals_event = wide.get("event_weeks", pd.Series(index=wide.index, dtype=float)).values
         vals_nonevent = wide.get("non_event_weeks", pd.Series(index=wide.index, dtype=float)).values
 
-        plt.figure(figsize=(12, 5.0))
+        plt.figure(figsize=(6, 5.0))
         plt.bar(x - width / 2, vals_event, width, label="Event weeks")
         plt.bar(x + width / 2, vals_nonevent, width, label="Non-event weeks")
         
