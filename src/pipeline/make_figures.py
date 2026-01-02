@@ -99,12 +99,12 @@ def fig_overall_mae_bar(overall: pd.DataFrame) -> None:
         x = np.arange(len(g), dtype=float)
         values = g[metric].astype(float).values
         
-        plt.figure(figsize=(10, 5.0))
+        plt.figure(figsize=(6, 5.0))
         plt.bar(x, values)
         plt.ylabel(pretty_metric)
         plt.title(f"Overall {pretty_metric} by model — {_pretty_cat(cat)}")
-        plt.xticks(x, g["model_label"], ha="center")
-        
+        plt.xticks(x, g["model_label"], ha="center", fontsize=8)
+
         #extend y-axis dynamically to fit labels
         y_max = float(np.nanmax(values)) if len(values) else 1.0
         plt.ylim(0, y_max * 1.25)
@@ -163,7 +163,7 @@ def fig_event_vs_nonevent_mae(ev: pd.DataFrame) -> None:
         
         plt.ylabel(pretty_metric)
         plt.title(f"{pretty_metric}: event vs non-event — {_pretty_cat(cat)}")
-        plt.xticks(x, [MODEL_LABELS.get(m, m) for m in wide.index], ha="center")
+        plt.xticks(x, [MODEL_LABELS.get(m, m) for m in wide.index], ha="center", fontsize=8)
         plt.legend()
 
         # dynamic y-lim
@@ -227,11 +227,11 @@ def fig_origin_stability(stab: pd.DataFrame) -> None:
         values = g[metric].astype(float).values
         errors = g[err_metric].astype(float).values
 
-        plt.figure(figsize=(10, 5.0))
+        plt.figure(figsize=(6, 5.0))
         plt.bar(x, values, yerr=errors, capsize=3)
         plt.ylabel(pretty_metric)
         plt.title(f"Forecast stability across origins — {_pretty_cat(cat)}")
-        plt.xticks(x, g["model_label"], ha="center")
+        plt.xticks(x, g["model_label"], ha="center", fontsize=8)
 
         # Extend y-axis dynamically to fit labels + error bars
         y_max = float(np.nanmax(values + errors)) if len(values) else 1.0
