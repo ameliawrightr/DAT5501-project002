@@ -1,9 +1,8 @@
 from __future__ import annotations
-from typing import Dict, Any, Tuple
+from typing import Dict, Tuple
 
 import pandas as pd
 import os
-import numpy as np 
 import time
 
 from src.models.backtest import (
@@ -281,7 +280,7 @@ def run_backtests_for_category(
     return results
 
 
-#Script entry point
+
 def main() -> None:
     categories = [
         "fitness_equipment",

@@ -1,17 +1,8 @@
 #Run event aware forecasting models for each event driven product cateogry
-"""This script:
- - Loads weekly demand and event indicators
- - Trains event aware auto regressive models
- - Evaluates on a 52 week hold out test window
- - Reports errors overall and restricted to event weeks
- - Generates diagnostic plots
-
-To run: python -m src.pipeline.run_event_models
-"""
 from __future__ import annotations
 
 import os
-from typing import Dict, List
+from typing import Dict
 
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -24,8 +15,8 @@ from src.models.event_models import (
 )
 
 #--------------------------------------------
-#Pretty print helpers 
-#--------------------------------------------
+# Pretty print helpers
+# --------------------------------------------
 def pretty_print_errors(model_name: str, errors: Dict[str, float]) -> None:
     #Pretty print error metrics.
     mae = float(errors["MAE"])
@@ -258,9 +249,9 @@ def run_event_models_pipeline(
         train_weeks_to_show=52,
     )
 
-#--------------------------------------------
-# Entry point
-#--------------------------------------------
+
+
+
 def main() -> None:
     categories = [
         "fitness_equipment",

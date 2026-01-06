@@ -1,15 +1,13 @@
 # Generate the 4 key figures
+"""CHECK THIS IS CORRECTED DESCRIPTION"""
 #1. Overall error by model (sMAPE)
 #2. Event vs non-event error (sMAPE)
 #3. Stability plot: per-origin error for baseline vs event_ridge
 #4. One “forecast vs actual” plot during an event window for each category
 
 from __future__ import annotations
-
-import os
 from pathlib import Path
 from typing import Dict
-import glob
 
 import numpy as np
 import pandas as pd
@@ -70,9 +68,6 @@ def _load_detailed_for(category: str, model: str) -> pd.DataFrame:
     df["origin_time"] = pd.to_datetime(df["origin_time"])
     df["forecast_time"] = pd.to_datetime(df["forecast_time"])
     return df
-
-def _event_cols(df: pd.DataFrame) -> list[str]:
-    return [c for c in df.columns if c.startswith("is_")]
 
 
 #1. Bar chart: mean MAE by model for each category
@@ -531,25 +526,10 @@ def main() -> None:
     ev = _load_summary("event_vs_nonevent_metrics.csv")
     stability = _load_summary("stability_metrics.csv")
 
-    fig_overall_mae_bar(overall) #figs 3a-3c
-    fig_event_vs_nonevent_mae(ev) #figs 1a-1c
-    fig_origin_stability(stability) #figs 4a-4c
-    make_electronics_volatility_figure() #figure 2
-
-"""
-    try:
-        fig_event_window_trace(
-        category="electronic_goods",
-        event_col="is_q4_holiday_electronics",
-        models=["rolling_average", "event_ridge", "event_random_forest"],
-    )
-    except FileNotFoundError as e:
-        print(f"[WARN] Skipped event window trace (missing detailed file): {e}")
-    except KeyError as e:
-        print(f"[WARN] Skipped event window trace (missing event column): {e}")
-
-    print(f"[OK] Figures saved to {FIG_DIR.resolve()}")
-"""
+    fig_overall_mae_bar(overall) 
+    fig_event_vs_nonevent_mae(ev) 
+    fig_origin_stability(stability) 
+    make_electronics_volatility_figure() 
 
 if __name__ == "__main__":
     main()

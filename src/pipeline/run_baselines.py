@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from pprint import pprint
-
 import matplotlib.pyplot as plt
 import pandas as pd
 import os
@@ -51,7 +49,7 @@ def print_event_window_errors(
 
         print(f"\n {model_name} - Errors on Event Weeks:")
 
-"""WORK ON THIS"""
+
 #Zoomed plot around last few years + test window so its readable
 def plot_baselines_zoomed(
         category: str,
@@ -86,8 +84,8 @@ def plot_baselines_zoomed(
     plt.show()
 
 
-#Baseline backtest chart - how models would have performed on last year
-"""Run baseline models for a single category and print metrics."""
+# Baseline backtest chart - how models would have performed on last year
+# Run baseline models for a single category and print metrics.
 #  - Train: full historical weekly demand to fit baselines (all weeks except last 52)
 #  - Test: last 52 weeks of demand
 #  - SN, RA, TR forecast for 52 week test period
@@ -188,8 +186,8 @@ def run_baselines_for_category(
 #Plot baseline forecasts for one category
 #  - last "train_weeks_to_show" weeks of training data
 #  - test / actual
-# - baselines on test window only
-# - shading for event weeks
+#  - baselines on test window only
+#  - shading for event weeks
 def plot_baselines_single_category(
         category: str,
         y_train: pd.Series, 
@@ -315,7 +313,6 @@ def plot_baselines_single_category(
     out_path = (f"artifacts/baselines/baselines_{category}_test_window.png")
     plt.savefig(out_path, dpi=300)
     plt.close()
-
 
 #Compare three event driven categories on one plot
 def plot_category_comparison(demand_fitness,

@@ -1,8 +1,6 @@
 #DEMAND INGESTION - ONS Retail Sales Data
 from __future__ import annotations
-
 from pathlib import Path
-from typing import Any
 
 import pandas as pd
 
@@ -11,9 +9,7 @@ from .validation import (
     require_columns,
     require_unique_keys,
     require_non_null,
-    require_numeric_range,
 )
-
 from src.features.event_features import (
     add_weekly_event_features,
     add_monthly_event_features
@@ -23,10 +19,8 @@ from src.features.event_features import (
 # INTERNAL HELPERS
 #--------------------------------------------------------------------------------------------
 
-#NEED TO CHECK THIS LIST IS COMPREHENSIVE ENOUGH <---
 _DATE_COL_CANDIDATES = ["time_period","time period", "time", "period", "Time Period", "date", "month", "week", "index_date"]
 _VALUE_COL_CANDIDATES = ["value", "v4_0", "obs_value", "observation", "index", "sales"]
-#dont really get the relevance of value col candidates here
 
 def _normalise_cols(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()

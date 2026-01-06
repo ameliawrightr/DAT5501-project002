@@ -1,11 +1,5 @@
 #Test event_models.py
-#Tes:
-# - feature matrix shape + columns
-# - fit+forecast shape + index
-# - test model learns event uplif
-
 import pandas as pd
-import numpy as np
 
 from src.models.event_models import (
     EventModelConfig,
@@ -88,7 +82,6 @@ def test_fit_and_forecast_event_model_shape_and_index():
     #result should be an EventModelForecast with trained model
     assert result.n_train_points == len(y_train)
     assert result.max_lag == 0  # because we set lags=()
-
 
 def test_event_model_learns_event_uplift_on_training_data():
     y_train, _, events_train, _, _ = synthetic_series_with_events()

@@ -1,10 +1,6 @@
 #Pipeline baselines tests
-#Runs against real data for one category and checks 
-# forecasts are of right length and include no errors/NaNs
 
-from turtle import pd
 import pytest
-from src.evaluation.metrics import compute_errors
 from src.pipeline.run_baselines import run_baselines_for_category
 
 def test_run_baselines_for_category():

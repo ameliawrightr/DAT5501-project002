@@ -1,24 +1,8 @@
 #EVENT AWARE FORECASTING MODELS
-"""
-This module implements autoregressive models with exogenous event features.
-The aim is to test whether explicitly modelling event windows (New Year,
-back-to-school, exam season, Q4 holidays, etc.) improves forecast accuracy
-and stability compared to history-only baselines.
-
-Design goals:
-- No data leakage: models are trained only on past values.
-- Forecasts generated recursively, 1-step-ahead over the horizon.
-- Clear separation of:
-    * feature engineering
-    * model fitting
-    * forecasting
-so that unit tests can target each part independently.
-"""
-
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Iterable, List, Literal, Sequence, Tuple
+from typing import List, Literal, Sequence, Tuple
 
 import numpy as np 
 import pandas as pd

@@ -6,7 +6,6 @@
 from __future__ import annotations
 
 import glob
-import os
 from pathlib import Path
 
 import numpy as np
@@ -148,7 +147,6 @@ def summarise_stability(df: pd.DataFrame) -> pd.DataFrame:
             }
         )
     return pd.DataFrame(out_rows).sort_values(["category", "origin_MAE_mean"])
-
 
 def summarise_by_event_type(df: pd.DataFrame) -> pd.DataFrame:
     # Breakdown by specific event flag (useful for Discussion)

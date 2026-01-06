@@ -31,8 +31,6 @@ def _validate_weekly_proxy(df: pd.DataFrame) -> None:
     counts = df.groupby("category")["week_start"].nunique()
     if counts.nunique() != 1:
         raise ValueError(f"Uneven week coverage by category: {counts.to_dict()} ")
-    
-
 
 def load_weekly_demand(
         demand_csv_path: str = "data/processed/demand_monthly.csv",

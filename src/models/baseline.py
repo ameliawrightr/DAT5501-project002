@@ -1,14 +1,11 @@
-#BASELINE FORCECASTING MODELS
-"""
-For event driven retail demand
+# BASELINE FORECASTING MODELS
+# For event driven retail demand
 
-Provides simple baseline forecasting models:
-1. Seasonal Naive
-2. Rolling Mean
-3. Time Only Linear Regression
+# Provides simple baseline forecasting models:
+# 1. Seasonal Naive
+# 2. Rolling Mean
+# 3. Time Only Linear Regression
 
-Baselines used as reference points for more complex, event-aware models.
-"""
 from __future__ import annotations
 
 from typing import Tuple
@@ -20,11 +17,6 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 from sklearn.linear_model import Ridge
 
-from src.models.forecasting_utils import (
-    make_lag_features, 
-    make_time_features, 
-    align_predictions
-)
 
 def _fourier_terms(
         index: pd.DatetimeIndex,

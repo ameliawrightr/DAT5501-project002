@@ -6,12 +6,6 @@ from pathlib import Path
 from .ons_retail import build_demand_monthly
 from .calendar_events import build_events_monthly
 
-from .validation import (
-    require_columns,
-    require_non_null,
-    require_unique_keys,
-)
-
 def main() -> None:
     project_root = Path(__file__).resolve().parents[2]
 

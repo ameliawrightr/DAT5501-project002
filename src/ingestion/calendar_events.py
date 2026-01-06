@@ -1,16 +1,14 @@
 #CALENDAR + EVENTS INDICATOR INGESTION
 from __future__ import annotations
-from calendar import month
 from pathlib import Path
 import pandas as pd
 
 from .validation import (
-    ValidationError,
     require_columns,
     require_unique_keys,
     require_non_null,
-    require_numeric_range,  
 )
+
 from .io import write_csv
 
 #1. merge into single calendar events table and save

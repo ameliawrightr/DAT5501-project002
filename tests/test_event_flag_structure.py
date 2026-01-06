@@ -1,6 +1,4 @@
-import pandas as pd
 from src.ingestion.demand import load_weekly_demand
-
 
 #test event flags exist and are boolean
 def test_event_flags_structure():
@@ -38,7 +36,3 @@ def test_event_flags_aligned_weekly():
         #no missing weeks in event flags
         assert not df_cat[col].isna().any()
 
-
-#FUTURE IMPLEMENTATION:
-#test event counts over small known range
-#e.g., know how many week are Q4/backtoschool assert counts

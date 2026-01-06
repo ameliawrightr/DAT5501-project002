@@ -1,12 +1,9 @@
 #Utility functions for forecasting models
-"""Provides:
-- Time feature construction for DateTimeIndex
-- Simple alignment of predictions to given index
-"""
+# Provides:
+# - Time feature construction for DateTimeIndex
+# - Simple alignment of predictions to given index
 
 from __future__ import annotations
-
-from operator import index
 from typing import Sequence
 
 import numpy as np

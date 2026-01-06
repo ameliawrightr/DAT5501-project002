@@ -5,7 +5,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Callable, Dict, Any, Optional, Tuple, List
 
-import numpy as np
 import pandas as pd
 
 from src.evaluation.metrics import compute_errors
