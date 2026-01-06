@@ -1,3 +1,13 @@
+"""
+Baseline model evaluation and plotting.
+
+This script does three things:
+1) Runs simple baseline forecasts (Seasonal Naive, Rolling Average, Time Regression)
+   on a 52-week holdout for each category and prints overall + event-window errors.
+2) Produces a clean baseline-vs-actual plot for each category (test window shown,
+   with event weeks shaded).
+3) Produces a single comparison plot of the three categories’ weekly demand proxy.
+"""
 from __future__ import annotations
 
 import matplotlib.pyplot as plt
@@ -13,6 +23,7 @@ from src.models.baseline import (
 from src.models.forecasting_utils import align_predictions
 from src.evaluation.metrics import compute_errors
 
+#PRINTING HELPERS
 #Nice formatted print of errors
 def pretty_print_errors(model_name: str, errors: dict) -> None:
     #Nice formatted print of errors
@@ -50,45 +61,14 @@ def print_event_window_errors(
         print(f"\n {model_name} - Errors on Event Weeks:")
 
 
-#Zoomed plot around last few years + test window so its readable
-def plot_baselines_zoomed(
-        category: str,
-        y_train: pd.Series, 
-        y_test: pd.Series, 
-        sn_forecast: pd.Series, 
-        ra_forecast: pd.Series, 
-        tr_forecast: pd.Series
-) -> None:
-    
-    plt.figure(figsize=(12, 6))
-
-    #inc last 5 years of train for context (5*52=260 weeks)
-    train_tail = y_train.iloc[-260:]
-    plt.plot(train_tail.index, train_tail, label="Train (last 5 years)", color="blue")
-    plt.plot(y_test.index, y_test, label="Test / Actual", color="black")
-
-    plt.plot(y_test.index, sn_forecast, label="Seasonal Naive Forecast", color="orange")
-    plt.plot(y_test.index, ra_forecast, label="Rolling Average Forecast", color="green")
-    #plt.plot(y_test.index, tr_forecast, label="Time Regression Forecast", color="red")
-
-    plt.title(f"Baseline Forecasts for {category} (weekly) - Zoomed Test Period")
-    plt.xlabel("Week")
-    plt.ylabel("Demand")
-    plt.legend()
-    plt.xticks(rotation=45)
-    plt.tight_layout()
-
-    os.makedirs("artifacts", exist_ok=True)
-    plt.savefig(f"artifacts/baselines/baselines_{category}.png", dpi=300)
-
-    plt.show()
-
-
-# Baseline backtest chart - how models would have performed on last year
-# Run baseline models for a single category and print metrics.
-#  - Train: full historical weekly demand to fit baselines (all weeks except last 52)
-#  - Test: last 52 weeks of demand
-#  - SN, RA, TR forecast for 52 week test period
+#BASELINE RUNNER
+"""
+Baseline backtest chart - how models would have performed on last year
+ Run baseline models for a single category and print metrics.
+  - Train: full historical weekly demand to fit baselines (all weeks except last 52)
+  - Test: last 52 weeks of demand
+  - SN, RA, TR forecast for 52 week test period
+"""
 def run_baselines_for_category(
         category: str,
         demand_csv_path: str = "data/processed/demand_monthly.csv",
@@ -96,7 +76,8 @@ def run_baselines_for_category(
         rolling_window: int = 12, #3 months rolling average
         test_weeks: int = 52, #test on last 52 weeks
 ) -> dict:
-    """Run baselines models for single product category and print metrics
+    """
+    Run baselines models for single product category and print metrics
     
     Parameters:
     - category: str
@@ -183,11 +164,14 @@ def run_baselines_for_category(
         "event_test": event_test,
     }
 
-#Plot baseline forecasts for one category
-#  - last "train_weeks_to_show" weeks of training data
-#  - test / actual
-#  - baselines on test window only
-#  - shading for event weeks
+#PLOTTING HELPERS
+""" 
+1. Plot baseline forecasts vs actuals for one category
+  - last "train_weeks_to_show" weeks of training data
+  - test / actual
+  - baselines on test window only
+  - shading for event weeks
+"""
 def plot_baselines_single_category(
         category: str,
         y_train: pd.Series, 
@@ -198,7 +182,6 @@ def plot_baselines_single_category(
         event_test: pd.DataFrame | None = None,
         train_weeks_to_show: int = 52,
 ) -> None:
-
     # focus on last "train_weeks_to_show" weeks of training data
     train_tail = y_train.iloc[-train_weeks_to_show:]
 
@@ -314,7 +297,9 @@ def plot_baselines_single_category(
     plt.savefig(out_path, dpi=300)
     plt.close()
 
-#Compare three event driven categories on one plot
+"""
+2. Compare three category demand series on one plot
+"""
 def plot_category_comparison(demand_fitness,
                              demand_school,
                              demand_electronics,

@@ -1,4 +1,14 @@
-#ROLLING ORIGIN BACKTESTING
+"""
+ROLLING ORIGIN BACKTESTING
+Implements a standard rolling-origin (a.k.a. walk-forward) evaluation procedure:
+
+- At each origin, train on history up to that point.
+- Forecast the next `horizon` steps.
+- Align predictions to the test window index.
+- Record:
+    1) aggregate metrics per origin (MAE, RMSE, sMAPE)
+    2) detailed per-timestamp errors (absolute, squared, point sMAPE)
+"""
 
 from __future__ import annotations
 
@@ -26,13 +36,14 @@ class BacktestConfig:
     initial_train_size: int = 104
     step_size: int = 1
 
+#Compute point wise sMAPE
 def _smape_point(y_true: float, y_pred: float) -> float:
-    """Compute SMAPE for a single point."""
     denominator = (abs(y_true) + abs(y_pred)) / 2
     if denominator == 0:
         return 0.0
     return abs(y_true - y_pred) / denominator
 
+#Perform rolling origin backtesting on univariate time series
 def rolling_origin_backtest(
     y: pd.Series,
     forecaster: Callable[[pd.Series, int, Dict[str, Any]], pd.Series],

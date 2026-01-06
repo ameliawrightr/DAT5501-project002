@@ -1,9 +1,23 @@
-# Generate the 4 key figures
-"""CHECK THIS IS CORRECTED DESCRIPTION"""
-#1. Overall error by model (sMAPE)
-#2. Event vs non-event error (sMAPE)
-#3. Stability plot: per-origin error for baseline vs event_ridge
-#4. One “forecast vs actual” plot during an event window for each category
+"""
+Figure generation for evaluation.
+
+This script produces the key evaluation figures used in the report.
+
+Figures generated
+-----------------
+1) Overall model performance (sMAPE)
+   - Bar chart of mean sMAPE (%) by model, per category.
+
+2) Event vs non-event performance (sMAPE)
+   - Grouped bars of mean sMAPE (%) on event weeks vs non-event weeks, per category.
+
+3) Forecast stability across rolling origins (MAE)
+   - Bar chart of origin-level MAE mean with error bars (± std), per category.
+
+4) Visual evaluation during high-volatility periods (holdout trace)
+   - Forecast vs actual on the last 52 weeks for the electronics category,
+     with the Q4 holiday window shaded and multiple models overlaid.
+"""
 
 from __future__ import annotations
 from pathlib import Path
@@ -18,6 +32,7 @@ from src.models.baseline import rolling_average
 from src.models.forecasting_utils import align_predictions
 from src.models.event_models import EventModelConfig, fit_and_forecast_event_model
 
+#PATHS/CONSTANTS
 BACKTEST_DIR = Path("artifacts/backtests")
 SUMMARY_DIR = Path("artifacts/summary")
 FIG_DIR = Path("artifacts/figures")
@@ -48,18 +63,22 @@ CATEGORY_LABELS = {
     "school": "School Supplies",
 }
 
+#Return report friendly category label
 def _pretty_cat(cat: str) -> str:
     return CATEGORY_LABELS.get(cat, CATEGORY_LABELS.get(cat, cat))
 
+#Create output directory for figures
 def _ensure_dirs() -> None:
     FIG_DIR.mkdir(parents=True, exist_ok=True)
 
+#Load summary CSV produced by backtest summarisation
 def _load_summary(name: str) -> pd.DataFrame:
     path = SUMMARY_DIR / name
     if not path.exists():
         raise FileNotFoundError(f"Missing {path}. Run summarise_backtests first.")
     return pd.read_csv(path)
 
+#Load detailed rolling origin backtest CSV for a given category and model
 def _load_detailed_for(category: str, model: str) -> pd.DataFrame:
     path = BACKTEST_DIR / f"{category}_{model}_detailed.csv"
     if not path.exists():
@@ -69,12 +88,9 @@ def _load_detailed_for(category: str, model: str) -> pd.DataFrame:
     df["forecast_time"] = pd.to_datetime(df["forecast_time"])
     return df
 
-
-#1. Bar chart: mean MAE by model for each category
-def fig_overall_mae_bar(overall: pd.DataFrame) -> None:
-    #overall error bar charts by model, using sMAPE (%)
-    #only plot key models to avoid clutter
-
+#FIGURE 1: Overall error by model (sMAPE)
+#Bar chart: mean sMAPE (%) by model for each category
+def fig_overall_sMAPE_bar(overall: pd.DataFrame) -> None:
     metric = "sMAPE"
     pretty_metric = "Mean sMAPE (%)"
 
@@ -122,10 +138,9 @@ def fig_overall_mae_bar(overall: pd.DataFrame) -> None:
         plt.savefig(out, dpi=300)
         plt.close()
 
-#2. Event vs non-event (baseline vs event_ridge)
-def fig_event_vs_nonevent_mae(ev: pd.DataFrame) -> None:
-    #event vs non event error comparison (sMAPE) for two main models:
-    # baseline Ridge vs event-aware Random Forest
+#FIGURE 2: Event vs non-event error comparison (sMAPE)
+#Grouped bars: mean sMAPE (%) on event weeks vs non-event weeks
+def fig_event_vs_nonevent_sMAPE(ev: pd.DataFrame) -> None:
     metric = "sMAPE"
     pretty_metric = "Mean sMAPE (%)"
 
@@ -201,8 +216,8 @@ def fig_event_vs_nonevent_mae(ev: pd.DataFrame) -> None:
         plt.savefig(out, dpi=300)
         plt.close()
 
-#3. Stability plot
-#origin level MAE mean +- std (lower is better)
+#FIGURE 3: Stability plot across origins (MAE mean +- std)
+#Bar chart: origin level MAE mean with error bars (± std), per category
 def fig_origin_stability(stab: pd.DataFrame) -> None:
     metric = "origin_MAE_mean"
     err_metric = "origin_MAE_std"
@@ -250,118 +265,10 @@ def fig_origin_stability(stab: pd.DataFrame) -> None:
         plt.savefig(out, dpi=300)
         plt.close()
 
-#4. dedicated event window trace figure
-"""Plot a realistic forecast trace around a specific event window:
-    - Uses ONE prediction per forecast_time: from the latest origin_time < forecast_time
-      (avoids averaging across origins / leaking future information)
-    - Focuses on the most recent event window, with padding.
-    - Shades event periods rather than drawing a line per week.
-    """
-def fig_event_window_trace(
-        category: str, 
-        event_col: str, 
-        models: list[str],
-        pad_weeks: int = 12,
-    ) -> None:
-    series: dict[str, pd.DataFrame] = {}
-    base: pd.DataFrame | None = None
 
-    for m in models:
-        df = _load_detailed_for(category, m).sort_values(["forecast_time", "origin_time"])
-
-        if event_col not in df.columns:
-            raise KeyError(f"{event_col} not found in {category}_{m}_detailed.csv")
-        
-        df[event_col] = df[event_col].astype(bool)
-
-        #pick "as-of" prediction for each forecast_time, take latest origin_time < forecast_time
-        df = df[df["origin_time"] < df["forecast_time"]].copy()
-        if df.empty:
-            continue
-
-        df = df.sort_values(["forecast_time", "origin_time"])
-        asof = df.groupby("forecast_time").tail(1) #latest origin per forecast time
-    
-        #agg per forecast_time: mean y_true, mean y_pred, max event flag
-        agg = (
-            asof[["forecast_time", "y_true", "y_pred", event_col]]
-            .rename(columns={"y_pred": f"y_pred_{m}"})
-            .sort_values("forecast_time")
-        )
-        series[m] = agg
-
-        if base is None:
-            base = agg[["forecast_time", "y_true", event_col]].copy()
-    
-    if base is None or base.empty:
-        return
-    
-    #identify most recent event window and zoom in + pad
-    ev_times = base.loc[base[event_col], "forecast_time"].sort_values()
-    if ev_times.empty:
-        raise ValueError(f"No events found in {category} for column {event_col}")
-    
-    #use most recent event year/season
-    last_ev = ev_times.max()
-    season_year = pd.Timestamp(last_ev).year
-  
-    #keep only event weeks from most recent year
-    ev_recent = ev_times[(ev_times.dt.year == season_year) | (ev_times.dt.year == season_year + 1)]
-    if ev_recent.empty:
-        ev_recent = ev_times #fallback
-
-    first_ev = ev_recent.min()
-    last_ev = ev_recent.max()
-
-    start = first_ev - pd.Timedelta(weeks=pad_weeks)
-    end = last_ev + pd.Timedelta(weeks=pad_weeks)
-
-    base_win = base[(base["forecast_time"] >= start) & (base["forecast_time"] <= end)].copy()
-    if base_win.empty:
-        return
-
-    plt.figure(figsize=(10, 5.0))
-    plt.plot(base_win["forecast_time"], base_win["y_true"], label="Actual")
-    
-    for m in models:
-        if m not in series:
-            continue
-        s = series[m]
-        s_win = s[(s["forecast_time"] >= start) & (s["forecast_time"] <= end)].copy()
-        
-        if m == "event_random_forest":
-            #emphasize event-aware model
-            plt.plot(
-                s_win["forecast_time"], 
-                s_win[f"y_pred_{m}"], 
-                label=MODEL_LABELS.get(m, m),
-                linewidth=2.0,
-                marker="o",
-            )
-        else:
-            plt.plot(
-                s_win["forecast_time"], 
-                s_win[f"y_pred_{m}"], 
-                label=MODEL_LABELS.get(m, m),
-                linewidth=2,
-            )
-
-    #shade full Q4 window
-    plt.axvspan(first_ev, last_ev, alpha=0.15, label="Q4 holiday window")
-    plt.axvline(first_ev, linestyle="--", linewidth=0.7)
-    plt.axvline(last_ev, linestyle="--", linewidth=0.7)
-
-    plt.title(f"Forecast vs actual during {event_col} — {_pretty_cat(category)}")
-    plt.ylabel("Demand")
-    plt.legend(fontsize=8)
-    plt.tight_layout()
-    out = FIG_DIR / f"{category}_{event_col}_forecast_trace.png"
-    plt.savefig(out, dpi=300)
-    plt.close()
-
-#Make figure to support	Visual Evaluation in High-Volatility Periods
+#FIGURE HELPER: shade boolean event spans 
+#Shade contiguous spans where mask is True
 def _shade_event_spans(ax, idx: pd.DatetimeIndex, mask: pd.Series, label:str) -> None:
-    #shade spans where mask is True
     mask = mask.reindex(idx).fillna(False).astype(bool)
     
     in_span = False
@@ -384,6 +291,7 @@ def _shade_event_spans(ax, idx: pd.DatetimeIndex, mask: pd.Series, label:str) ->
             in_span = False
         prev = t
 
+    #close an open span at the end of series
     if in_span and span_start is not None and prev is not None:
         ax.axvspan(
             span_start,
@@ -392,6 +300,8 @@ def _shade_event_spans(ax, idx: pd.DatetimeIndex, mask: pd.Series, label:str) ->
             label=(label if not first_label_used else None),
         )
 
+#FIGURE 4: Electronics holdout trace with Q4 shading
+#Forecast vs actual on last 52 weeks for electronics, with Q4 holiday window shaded
 def make_electronics_volatility_figure(
         demand_csv_path: str = "data/processed/demand_monthly.csv",
         category: str = "electronic_goods",
@@ -519,6 +429,8 @@ def make_electronics_volatility_figure(
 
     print(f"[OK] Wrote {out_path}")
 
+
+#Generate all figs required for report
 def main() -> None:
     _ensure_dirs()
 
@@ -526,8 +438,8 @@ def main() -> None:
     ev = _load_summary("event_vs_nonevent_metrics.csv")
     stability = _load_summary("stability_metrics.csv")
 
-    fig_overall_mae_bar(overall) 
-    fig_event_vs_nonevent_mae(ev) 
+    fig_overall_sMAPE_bar(overall) 
+    fig_event_vs_nonevent_sMAPE(ev) 
     fig_origin_stability(stability) 
     make_electronics_volatility_figure() 
 

@@ -1,3 +1,12 @@
+"""
+Rolling-origin backtest runner.
+
+Runs a consistent rolling-origin (walk-forward) evaluation across multiple model families
+for each product category and writes artifacts to:
+
+    artifacts/backtests/{category}_{model}_{detailed|aggregate}.csv
+"""
+
 from __future__ import annotations
 from typing import Dict, Tuple
 
@@ -22,17 +31,19 @@ from src.models.event_models import (
 from src.ingestion.demand import load_weekly_demand
 
 
-#SMALL WRAPPERS SO SIGNATURES MATCH rolling_origin_backtest EXPECTATIONS
+#FORECASTER WRAPPERS
+#Seasonal Naive wrapper
 def sn_forecaster(history: pd.Series,horizon: int,seasonal_period: int,**kwargs) -> pd.Series:
     return seasonal_naive(history,horizon=horizon,seasonal_period=seasonal_period)
-
+#Rolling Average wrapper
 def ra_forecaster(history: pd.Series,horizon: int,window: int=12,**kwargs) -> pd.Series:
     return rolling_average(history,horizon=horizon,window=window)
-
+#Time Regression wrapper
 def tr_forecaster(history: pd.Series,horizon: int,**kwargs) -> pd.Series:
     forecast, _ = time_regression(history=history,horizon=horizon)
     return forecast
-
+#EVENT AWARE FORECASTER WRAPPERS
+#Ridge Event Model wrapper
 def event_ridge_forecaster(
         history: pd.Series,
         horizon: int,
@@ -82,7 +93,7 @@ def event_ridge_forecaster(
     )
 
     return forecast
-
+#Random Forest Event Model wrapper
 def event_rf_forecaster(
         history: pd.Series,
         horizon: int,
@@ -139,7 +150,6 @@ def event_rf_forecaster(
 #------------------------------
 #Core backtest runner
 #------------------------------
-
 def run_backtests_for_category(
         category: str,
         demand_csv_path: str = "data/processed/demand_monthly.csv",

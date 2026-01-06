@@ -1,24 +1,53 @@
-#formalising files living under data/processed
+""" 
+Weekly demand proxy construction (data/processed)
+
+This module builds a *weekly* demand proxy by disaggregating monthly demand across the
+weeks in each month and attaching weekly calendar/event indicators.
+
+Key idea:
+- Demand is observed monthly (by category).
+- Calendar/event indicators are observed weekly.
+- We map each week to its calendar month, join monthly demand by (month, category),
+  then split the monthly demand evenly across all weeks that fall in that month.
+
+Important:
+- This is a proxy. Equal-split disaggregation is a simplifying assumption and can
+  distort intra-month dynamics (especially around events).
+"""
 
 from __future__ import annotations
 
+from pathlib import Path
+from typing import List
+
 import pandas as pd
 
+# ------------------------------------
+#Internal validation helpers
+# ------------------------------------
+#1. Validate weekly proxy integrity
 def _validate_weekly_proxy(df: pd.DataFrame) -> None:
-    #fail if weekly proxy frame malformed
+    """
+    Enforces:
+    - required columns present
+    - no nulls in key columns
+    - week_start is datetime and always a Monday
+    - each category has complete set of weeks
+    """
     required_columns = {"week_start", "category", "demand"}
     missing = required_columns - set(df.columns)
     if missing:
         raise ValueError(f"Weekly proxy missing required columns: {sorted(missing)}")
     
+    #null checks
     if df["week_start"].isna().any():
          raise ValueError("week_start contains null values")
     if df["category"].isna().any():
          raise ValueError("category contains null values")
     if df["demand"].isna().any():
          raise ValueError("demand contains null values after merge/disaggregation")
-    
-    #ensure each cat has complete set of Monday start
+
+    #week_start must be datetime for time-based operations and plotting
     if not pd.api.types.is_datetime64_any_dtype(df["week_start"]):
         raise ValueError("week_start must be datetime type")
     
@@ -27,11 +56,15 @@ def _validate_weekly_proxy(df: pd.DataFrame) -> None:
     if len(weekdays) != 1 or weekdays[0] != 0:
         raise ValueError(f"week_start must always be a Monday, got weekdays={weekdays}")
     
-    #for each cat: same count of unique weeks
+    #each category should have same number of unique week_start values
     counts = df.groupby("category")["week_start"].nunique()
     if counts.nunique() != 1:
         raise ValueError(f"Uneven week coverage by category: {counts.to_dict()} ")
 
+
+# ------------------------------------
+#Main function: load weekly demand proxy
+# ------------------------------------
 def load_weekly_demand(
         demand_csv_path: str = "data/processed/demand_monthly.csv",
         calendar_csv_path: str = "data/processed/calendar_events_uk_weekly_1988_2025.csv",
@@ -64,6 +97,8 @@ def load_weekly_demand(
         
     dm = dm.copy()
     dm["month"] = dm["date"].dt.to_period("M")
+
+    #Only keep cols needed for disaggregation
     dm = dm[["month", "category", "demand"]].sort_values(["month", "category"])
 
     #Load weekly calendar

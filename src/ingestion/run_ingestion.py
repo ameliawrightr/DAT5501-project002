@@ -1,4 +1,20 @@
-#ONE COMMAND TO RUN INGESTION END TO END
+"""
+ONE COMMAND TO RUN INGESTION END TO END
+This script builds the core processed datasets used by the project:
+
+1) demand_monthly.csv
+   - standardised monthly demand (ONS retail volume extract)
+   - optionally enriched with monthly event features (depending on your pipeline)
+
+2) events_monthly.csv
+   - monthly event indicators aggregated from the weekly event calendar
+
+Run from the project root (recommended):
+    python -m src.ingestion.run_ingestion
+
+Or directly:
+    python src/ingestion/run_ingestion.py
+"""
 
 from __future__ import annotations
 from pathlib import Path

@@ -5,7 +5,7 @@ from typing import Optional
 
 import pandas as pd
 
-#Paths to processed event files
+#Project paths
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 PROCESSED_DIR = PROJECT_ROOT / "data" / "processed"
 
@@ -15,10 +15,10 @@ MONTHLY_EVENTS_PATH = PROCESSED_DIR / "events_monthly.csv"
 #--------------------------------------------------------------------
 # Loaders
 #--------------------------------------------------------------------
+#1. Load weekly event calendar (UK) and parse date columns
 def load_weekly_event_calendar(
         path: Path = WEEKLY_EVENTS_PATH
 ) -> pd.DataFrame:
-    #load weekly calendar/events features and parse dates
     events = pd.read_csv(path)
 
     #use DD/MM/YYYY date format
@@ -27,11 +27,10 @@ def load_weekly_event_calendar(
 
     return events
 
+#2. Load monthly event features and parse date column
 def load_monthly_events(
         path: Path = MONTHLY_EVENTS_PATH
 ) -> pd.DataFrame:
-    
-    #load monthly calendar/events features and parse dates
     events = pd.read_csv(path)
 
     #use DD/MM/YYYY date format
@@ -40,7 +39,7 @@ def load_monthly_events(
     return events
 
 #--------------------------------------------------------------------
-# Feature function
+# Feature merge helpers
 #--------------------------------------------------------------------
 
 def add_weekly_event_features(
@@ -50,7 +49,13 @@ def add_weekly_event_features(
 ) -> pd.DataFrame:
     """ 
     Merge weekly calendar/event indicators onto weekly demand df
+    Merge performed as (many rows per week_start) --> events (one row per week_start)
     
+    This function enforces:
+      - `date_col` exists in `demand_weekly`
+      - merge cardinality is many-to-one (m:1)
+      - no demand rows are left without matching event features
+
     Parameters:
     - demand_weekly: pd.DataFrame
         DataFrame with weekly demand data, must contain date_col
@@ -68,23 +73,25 @@ def add_weekly_event_features(
 
     df = demand_weekly.copy()
 
-    #normalise to datetime for safe join
+    #Fail fast if join key missing
     if date_col not in df.columns:
         raise ValueError(f"Date column '{date_col}' not found in demand_weekly DataFrame.")
     
+    #Normalise join key to datetime to avoid "object vs datetime" issues
     df[date_col] = pd.to_datetime(df[date_col], errors='coerce')
 
-    #align column name with events.week_start
+    #Align events join key name to demand join key name
     events_for_merge = events.rename(columns={"week_start": date_col})
 
+    #Merge event features onto demand. Many demand rows to one event row
     merged = pd.merge(
         events_for_merge,
         on=date_col,
         how="left",
-        validate="m:1", #many demand rows to one event row
+        validate="m:1",
     )
 
-    #sanity check - no missing event rows where demand
+    #Sanity check - no missing event rows where demand
     if merged["is_new_year_fitness"].isna().any():
         missing = merged[merged["is_new_year_fitness"].isna()][[date_col]].head()
         raise ValueError(
@@ -101,6 +108,13 @@ def add_monthly_event_features(
     """ 
     Merge monthly calendar/event indicators onto monthly demand df
     
+    Merge performed as (many rows per date) --> events (one row per date)
+
+    This function enforces:
+      - `date_col` exists in `demand_monthly`
+      - merge cardinality is many-to-one (m:1)
+      - no demand rows are left without matching event features
+
     Parameters:
     - demand_monthly: pd.DataFrame
         DataFrame with monthly demand data, must contain date_col
@@ -118,12 +132,14 @@ def add_monthly_event_features(
 
     df = demand_monthly.copy()
 
-    #normalise to datetime for safe join
+    #Fail fast if join key missing
     if date_col not in df.columns:
         raise ValueError(f"Date column '{date_col}' not found in demand_monthly DataFrame.")
     
+    #Normalise join key to datetime for consistent joinng
     df[date_col] = pd.to_datetime(df[date_col], errors='coerce')
 
+    #Align events join key name to demand join key name
     events_for_merge = events.rename(columns={"date": date_col})
 
     merged = df.merge(
@@ -133,6 +149,7 @@ def add_monthly_event_features(
         validate="m:1", #many demand rows to one event row
     )
 
+    #Sanity check - no missing event rows where demand
     if merged["is_new_year_fitness"].isna().any():
         missing = merged[merged["is_new_year_fitness"].isna()][[date_col]].head()
         raise ValueError(

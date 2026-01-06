@@ -1,3 +1,4 @@
+#Shared validation utilities for ingestion and feature engineering
 from __future__ import annotations
 import pandas as pd
 
@@ -5,6 +6,7 @@ class ValidationError(ValueError):
     #Raised when df fails pipeline validation checks
     pass
 
+#COLUMN LEVEL VALIDATIONS
 #1. Ensure that the DataFrame contains the required columns.
 def require_columns(df: pd.DataFrame, cols: list[str], name: str) -> None:
     missing = [c for c in cols if c not in df.columns]
@@ -14,12 +16,25 @@ def require_columns(df: pd.DataFrame, cols: list[str], name: str) -> None:
             f"Available columns: {list(df.columns)}"
             )
 
-#2. Ensure that the combination of keys is unique in the DataFrame.
+#2. Ensure that specified columns do not contain null values.
+def require_non_null(df: pd.DataFrame, cols: list[str], name: str) -> None:
+    require_columns(df, cols, name)
+
+    null_counts = df[cols].isna().sum()
+    bad = null_counts[null_counts > 0]
+    
+    if not bad.empty:
+        details = ", ".join([f"{col} ({count} nulls)" for col, count in bad.items()])
+        raise ValidationError(f"{name} contains null values in columns: {details}")
+
+#KEY AND CONTINUITY VALIDATIONS
+#3. Ensure that the combination of keys columns uniquely identifies rows
 def require_unique_keys(df: pd.DataFrame, keys: list[str], name: str) -> None: 
     require_columns(df, keys, name)
     
-    #drop rows where any key is null-null, keys are always invalid for uniqueness checks
     key_df = df[keys]
+
+    #null keys always invalid in this pipeline
     if key_df.isna().any(axis=None):
         null_rows = int(key_df.isna().any(axis=1).sum())
         raise ValidationError(f"{name} contains null values in keys: {keys} ({null_rows} rows)")
@@ -31,9 +46,8 @@ def require_unique_keys(df: pd.DataFrame, keys: list[str], name: str) -> None:
             f"[{name}] contains duplicate entries for keys: {keys}."
             f"Example duplicates (first 10): {dup_rows} ")
 
-#3. Ensure that there are no missing weeks in the time series data.
+#4. Ensure weekly time series has no missing week-start timestamps
 def require_no_missing_weeks(df: pd.DataFrame, week_col: str, name: str) -> None:
-    #ensure weekly continuity in week_col
     require_columns(df, [week_col], name)
 
     s = pd.to_datetime(df[week_col], errors='coerce')
@@ -60,16 +74,8 @@ def require_no_missing_weeks(df: pd.DataFrame, week_col: str, name: str) -> None
             f"Examples: {sample}"
         )
 
-#4. Ensure that specified columns do not contain null values.
-def require_non_null(df: pd.DataFrame, cols: list[str], name: str) -> None:
-    require_columns(df, cols, name)
-    null_counts = df[cols].isna().sum()
-    bad = null_counts[null_counts > 0]
-    if not bad.empty:
-        details = ", ".join([f"{col} ({count} nulls)" for col, count in bad.items()])
-        raise ValidationError(f"{name} contains null values in columns: {details}")
-
-#5. Ensure that the values in a column fall within a specified range.
+#NUMERIC VALIDATIONS
+#5. Ensure column can be converted to numeric and lies within an optional range 
 def require_numeric_range(
         df: pd.DataFrame, 
         col: str, 
@@ -77,10 +83,11 @@ def require_numeric_range(
         hi: float | None, 
         name: str
 ) -> None:
-    #ensure column is numeric and within optional [lo, hi] range
     require_columns(df, [col], name)
     
     s = pd.to_numeric(df[col], errors='coerce')
+
+    #allow some NaNs but not all
     if s.isna().all():
         bad = int(s.isna().sum())
         raise ValidationError(f"[{name}] column '{col}' cannot be converted to numeric;"

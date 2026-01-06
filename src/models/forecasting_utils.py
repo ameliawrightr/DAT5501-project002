@@ -1,21 +1,24 @@
-#Utility functions for forecasting models
-# Provides:
-# - Time feature construction for DateTimeIndex
-# - Simple alignment of predictions to given index
+"""
+Forecasting utility functions.
 
+Provides small, reusable helpers for:
+- constructing lag features from a univariate time series
+- constructing simple calendar/time features from a DatetimeIndex
+- aligning raw model predictions to a target DatetimeIndex
+"""
 from __future__ import annotations
 from typing import Sequence
 
 import numpy as np
 import pandas as pd
 
-#1. Create lag features
+#FEATURE ENGINEERING
+#1. Create lag features for a time series
 def make_lag_features(
     series: pd.Series,
     lags: Sequence[int]
 ) -> pd.DataFrame:
-    """Create lag features for a time series.
-
+    """
     Each lag k creates a column 'lag_k' containing series.shift(k).
 
     Parameters:
@@ -40,12 +43,11 @@ def make_lag_features(
 
     return pd.DataFrame(lagged, index=series.index)
 
-#2. Create time features
+#2. Create basic time based features from a DateTimeIndex
 def make_time_features(
     index: pd.DatetimeIndex,
 ) -> pd.DataFrame:
-    """Created basic time based features from DateTimeIndex.
-    
+    """
     Features include:
     - time_index : integer trend (0,1,2,...)
     - weekofyear : ISO week number (1-53)
@@ -78,13 +80,14 @@ def make_time_features(
 
     return features
 
-#3.
+
+#FORECAST ALIGNMENT
+#3. Attach DateTimeIndex to sequence of predictions
 def align_predictions(
     predictions: Sequence[float],
     index: pd.DatetimeIndex,
 ) -> pd.Series:
-    """Attach DateTimeIndex to sequence of preduction
-    
+    """
     Use align baseline forecasts to test period - often computed wo DateTimeIndex.
     
     Parameters:

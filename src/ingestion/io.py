@@ -1,4 +1,15 @@
-#shared IO + validation functions
+"""
+Shared IO utilities
+This module contains small, reusable helpers for:
+- ensuring directories exist
+- reading tabular files (CSV / Excel) into pandas
+- writing DataFrames to CSV in a consistent way
+
+Design goals:
+- predictable behaviour
+- clear, actionable error messages
+- no hidden side effects (except optional logging via print)
+"""
 from __future__ import annotations
 
 from pathlib import Path
@@ -39,7 +50,6 @@ def read_csv_or_excel(
         "Expected .csv, .xlsx, or .xls."
     )
 
-
 #3. Write a DataFrame to a CSV file.
 def write_csv(
         df: pd.DataFrame,
@@ -57,7 +67,5 @@ def write_csv(
         print(f"[write_csv] Wrote {dataset_name!r} CSV file to {p.resolve()}")
     else:
         print(f"[write_csv] Wrote CSV file to {p.resolve()}")
-
-    print(f"[write_csv] Wrote CSV file to {p.resolve()}")
 
 

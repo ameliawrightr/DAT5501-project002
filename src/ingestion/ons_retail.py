@@ -1,4 +1,15 @@
-#DEMAND INGESTION - ONS Retail Sales Data
+"""
+DEMAND INGESTION - ONS Retail Sales Data
+This module standardises pre-cleaned demand extracts into modelling-ready datasets:
+
+- Monthly demand: one row per (month_start, category), plus monthly event features.
+- Weekly demand : one row per (week_start (Mon), category), plus weekly event features.
+
+Assumptions:
+- Input files are already filtered/pre-cleaned to contain the relevant categories and
+  demand measure (e.g., volume index).
+- Duplicate keys are resolved via mean aggregation before validation.
+"""
 from __future__ import annotations
 from pathlib import Path
 
@@ -72,8 +83,8 @@ def _is_long_format(df: pd.DataFrame) -> bool:
 def _coerce_numeric(s: pd.Series) -> pd.Series:
     return pd.to_numeric(s, errors="coerce")
 
+#Anchor datetime series to week starting Monday
 def _week_start_monday(dt: pd.Series) -> pd.Series:
-    #convert to anchored on Monday, then start_time
     return dt.dt.to_period("W-MON").dt.start_time
 
 
@@ -81,8 +92,7 @@ def _week_start_monday(dt: pd.Series) -> pd.Series:
 # PUBLIC API
 #--------------------------------------------------------------------------------------------
 
-
-#1. validate time series assumptions and save processed file
+#1. Build standardised monthly demand table and append monthly event features
 def build_demand_monthly(
     in_path: Path,
     out_path: Path,
@@ -93,18 +103,27 @@ def build_demand_monthly(
     category_remap: dict[str, str] | None = None,
 ) -> pd.DataFrame:
     """
-    Read pre-cleaned monthly demand file (date, category, value),
-    Outputs standardised monthly demand.
+    Build a standardised monthly demand table and append monthly event features.
 
-    Expected input columns:
-     - date (monthly date)(datetime)
-     - category (str)
-     - volume_index (numeric)
+    Expected input columns (pre-cleaned extract):
+      - date         : month-like date column (string or datetime)
+      - category     : category identifier
+      - volume_index : numeric demand measure (or override via value_col)
 
     Output columns:
-     - date (month start) (datetime)
-     - category (str)
-     - demand (numeric)
+      - date     : month start timestamp (datetime64)
+      - category : str
+      - demand   : float
+      - plus monthly event columns (e.g., is_new_year_fitness, ...)
+
+    Processing steps:
+      1) Read input CSV and validate required columns are present and non-null.
+      2) Parse date and normalise to month start (YYYY-MM-01).
+      3) Clean category labels (strip whitespace; optional remap).
+      4) Coerce demand to numeric.
+      5) Aggregate duplicates to a single row per (date, category) using mean.
+      6) Merge in monthly event features using `add_monthly_event_features`.
+      7) Write to CSV.
      """
     in_path = Path(in_path)
     if not in_path.exists():
@@ -112,48 +131,45 @@ def build_demand_monthly(
     
     df = pd.read_csv(in_path)
 
-    #validate required structure
+    #validate input structure
     require_columns(df, [date_col, category_col, value_col], "demand_monthly_input")
     require_non_null(df, [date_col, category_col, value_col], "demand_monthly_input")
 
-    #standardise
+    #standardise column names
     df = df.rename(columns={value_col: "demand"}).copy()
 
+    #parse dates and normalise to month start
     df[date_col] = pd.to_datetime(df[date_col], errors="coerce")
     require_non_null(df, [date_col], "demand_monthly_parsed")
-
-    #normalise to monthstart timestamp
     df["date"] = df[date_col].dt.to_period("M").dt.to_timestamp()
 
+    #clean and standardise category labels
     df["category"] = df[category_col].astype(str).str.strip()
     if category_remap:
         df["category"] = df["category"].replace(category_remap)
 
+    #ensure demand is numeric
     df["demand"] = pd.to_numeric(df["demand"], errors="coerce")
     require_non_null(df, ["demand"], "demand_monthly_numeric")
 
-    #ensure one row per (month, category)
+    #enforce single row per (month, category)
     df_out = df.groupby(["date", "category"], as_index=False)["demand"].mean()
     require_unique_keys(df_out, ["date", "category"], "demand_monthly")
 
-    #add event features
-    #use src.features.event_features.add_monthly_event_features
-    #loads data/processed/events_monthly.csv by default
-
+    #append monthly event features
     df_out = add_monthly_event_features(
         df_out,
         events=None, #helper loads events_monthly.csv
         date_col="date" #mathches normalised date col
     )
 
-    #write out
     out_path = Path(out_path)
     write_csv(df_out, out_path, dataset_name="demand_monthly")
 
     return df_out
 
 
-#2. validate time series assumptions and save processed file
+#2. Build standardised weekly demand table and append weekly event features
 def build_demand_weekly(
     in_path: Path,
     out_path: Path,
@@ -164,37 +180,42 @@ def build_demand_weekly(
     category_remap: dict[str, str] | None = None,
 ) -> pd.DataFrame:
     """
-    Build weekly demand from pre cleaned input file
-    
-    Input columns:
-     - date (weekly date) (datetime)
-     - category (str)
-     - volume_index (numeric)
-     
-     Output columns:
-     - date (week start) (datetime)
-     - category (str)
-     - demand (numeric)
-     + weekly event feature columns from calendar_events_uk_weekly_1988_2025
+    Build a standardised weekly demand table and append weekly event features.
+
+    Expected input columns (pre-cleaned extract):
+      - date         : week-like date column (string or datetime)
+      - category     : category identifier
+      - volume_index : numeric demand measure (or override via value_col)
+
+    Output columns:
+      - week_start / date : Monday week start timestamp (datetime64)
+      - category          : str
+      - demand            : float
+      - plus weekly event columns (e.g., is_new_year_fitness, ...)
+
+    Processing steps:
+      1) Read input CSV and validate required columns are present and non-null.
+      2) Parse date and normalise to Monday week-start timestamps.
+      3) Clean category labels (strip whitespace; optional remap).
+      4) Coerce demand to numeric.
+      5) Aggregate duplicates to a single row per (date, category) using mean.
+      6) Merge in weekly event features using `add_weekly_event_features`.
+      7) Write to CSV.
      """
-    
     in_path = Path(in_path)
     if not in_path.exists():
         raise FileNotFoundError(f"Input demand file not found: {in_path}")
     
     df = pd.read_csv(in_path)
 
-    #validate required structure
     require_columns(df, [date_col, category_col, value_col], "demand_weekly_input")
     require_non_null(df, [date_col, category_col, value_col], "demand_weekly_input")
 
-    #standardise
     df = df.rename(columns={value_col: "demand"}).copy()
 
+    #parse dates then normalise to week start (Monday)
     df[date_col] = pd.to_datetime(df[date_col], errors="coerce")
     require_non_null(df, [date_col], "demand_weekly_parsed")
-
-    #normalise to week start (Monday)
     df["date"] = _week_start_monday(df[date_col])
 
     df["category"] = df[category_col].astype(str).str.strip()
@@ -208,17 +229,13 @@ def build_demand_weekly(
     df_out = df.groupby(["date", "category"], as_index=False)["demand"].mean()
     require_unique_keys(df_out, ["date", "category"], "demand_weekly")
 
-    #add weekly event features
-    #use src.features.event_features.add_weekly_event_features
-    #loads data/processed/calendar_events_uk_weekly_1988_2025.csv by default
-
+    #append weekly event features
     df_out = add_weekly_event_features(
         df_out,
         events=None, #helper loads calendar_events_uk_weekly_1988_2025.csv
         date_col="date" #mathches normalised date col
     )
 
-    #write out
     out_path = Path(out_path)
     write_csv(df_out, out_path, dataset_name="demand_weekly")
 

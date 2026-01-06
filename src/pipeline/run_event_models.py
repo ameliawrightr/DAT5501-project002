@@ -1,4 +1,9 @@
-#Run event aware forecasting models for each event driven product cateogry
+"""
+Event-aware model runner (per category).
+
+This script fits and evaluates event-aware forecasting models for each event-driven
+product category using a 52-week holdout window.
+"""
 from __future__ import annotations
 
 import os
@@ -14,9 +19,10 @@ from src.models.event_models import (
     fit_and_forecast_event_model,
 )
 
-#--------------------------------------------
+# --------------------------------------------
 # Pretty print helpers
 # --------------------------------------------
+#Print MAE, RMSE, sMAPE in a consistent, readable format
 def pretty_print_errors(model_name: str, errors: Dict[str, float]) -> None:
     #Pretty print error metrics.
     mae = float(errors["MAE"])
@@ -28,19 +34,13 @@ def pretty_print_errors(model_name: str, errors: Dict[str, float]) -> None:
         f"sMAPE: {smape:6.2f}%"
     )
 
+#Compute and print errors restricted to event weeks
 def print_event_window_errors(
     model_name: str,
     y_true: pd.Series,
     y_pred: pd.Series,
     event_test: pd.DataFrame,
 ) -> None:
-    """Compute and print errors restricted to event weeks.
-     Assumes event_test contains boolean columns such as:
-        - is_new_year_fitness
-        - is_back_to_school
-        - is_exam_season
-        - is_q4_holiday_electronics
-    """
     masks = {
         "Any event week": event_test.any(axis=1),
         "New Year Fitness": event_test.get(
@@ -156,7 +156,6 @@ def plot_event_forecast(
 #--------------------------------------------
 # Main pipeline
 #--------------------------------------------
-
 def run_event_models_pipeline(
         category: str,
         demand_csv_path: str = "data/processed/demand_monthly.csv",
